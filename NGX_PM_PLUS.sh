@@ -632,6 +632,10 @@ install_npm() {
     # Crear el script directamente en el host SIN usar pct exec
     cat > "$LOCAL_SCRIPT" << 'SCRIPT_END'
 #!/bin/bash
+# Recibir contraseñas como argumentos (evita problemas de expansión)
+DB_NPM_PASS="$1"
+DB_ROOT_PASS="$2"
+
 set -e
 export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 apt update && apt upgrade -y
@@ -711,13 +715,13 @@ services:
       retries: 30
       start_period: 30s
 YAML_END
-sed -i "s|NPMPASS_PLACEHOLDER|$DB_NPM_PASS|g;s|ROOTPASS_PLACEHOLDER|$DB_ROOT_PASS|g" docker-compose.yml
+sed -i "s|NPMPASS_PLACEHOLDER|${DB_NPM_PASS}|g;s|ROOTPASS_PLACEHOLDER|${DB_ROOT_PASS}|g" docker-compose.yml
 docker compose up -d 2>&1 || { sleep 5; docker compose up -d; }
 
 # Esperar a que MariaDB esté lista
 echo "Esperando a que la base de datos esté lista..."
 for i in {1..60}; do
-  if docker exec npm_db mariadb-admin ping -h 127.0.0.1 -u root -pROOTPASS_PLACEHOLDER &>/dev/null 2>&1; then
+  if docker exec npm_db mariadb-admin ping -h 127.0.0.1 -u root -p"${DB_ROOT_PASS}" &>/dev/null 2>&1; then
     echo "✓ Base de datos lista"
     break
   fi
@@ -756,9 +760,9 @@ SCRIPT_END
 
     chmod +x "$LOCAL_SCRIPT"
     
-    # Copiar y ejecutar
+    # Copiar y ejecutar CON ARGUMENTOS (contraseñas)
     pct push $CTID "$LOCAL_SCRIPT" "$CONTAINER_SCRIPT"
-    pct exec $CTID -- bash "$CONTAINER_SCRIPT"
+    pct exec $CTID -- bash "$CONTAINER_SCRIPT" "$DB_NPM_PASS" "$DB_ROOT_PASS"
     
     # Limpiar archivo temporal
     rm -f "$LOCAL_SCRIPT"
