@@ -20,7 +20,7 @@ NC='\033[0m'
 
 CONFIG_FILE="/root/.npm_config"
 LOG_FILE="/root/npm_installer.log"
-SCRIPT_VERSION="2.8.5"
+SCRIPT_VERSION="2.8.3"
 
 # Constantes de formato
 MENU_WIDTH=59
@@ -32,7 +32,7 @@ MENU_BOT="${CYAN}└────────────────────
 # Valores por defecto de URLs
 DEFAULT_DOCKER_URL="https://get.docker.com"
 DEFAULT_COMPOSE_VERSION="2.20.0"
-DEFAULT_NPM_IMAGE="jc21/nginx-proxy-manager:2.11.0"
+DEFAULT_NPM_IMAGE="jc21/nginx-proxy-manager:latest"
 DEFAULT_DB_IMAGE="jc21/mariadb-aria:latest"
 
 ################################################################################
@@ -748,39 +748,37 @@ apt install -y curl ca-certificates gnupg lsb-release sudo vim net-tools jq proc
 ! command -v docker &>/dev/null && { curl -fsSL https://get.docker.com | sh; systemctl enable docker; systemctl start docker; }
 mkdir -p /root/nginx-proxy-manager/{data/mysql,letsencrypt,backups}
 cd /root/nginx-proxy-manager
-# No crear red externa, dejaremos que docker-compose lo haga
-# docker network create npm_network 2>/dev/null || true
+docker network create npm_network 2>/dev/null || true
+
+# Crear script de espera para conexión a BD
+cat > /root/nginx-proxy-manager/wait-for-db.sh << 'WAITSCRIPT'
+#!/bin/bash
+set -e
+host="$1"
+port="$2"
+shift 2
+cmd="$@"
+
+until nc -z "$host" "$port"; do
+  >&2 echo "Base de datos en $host:$port aún no está lista - esperando..."
+  sleep 2
+done
+
+>&2 echo "Base de datos lista - ejecutando comando..."
+exec $cmd
+WAITSCRIPT
+chmod +x /root/nginx-proxy-manager/wait-for-db.sh
 
 cat > docker-compose.yml << 'YAML_END'
-version: '3.8'
 networks:
   npm_net:
-    driver: bridge
+    external: true
+    name: npm_network
 services:
-  npm_db:
-    image: jc21/mariadb-aria:latest
-    container_name: npm_db
-    restart: always
-    networks: [npm_net]
-    environment:
-      MYSQL_ROOT_PASSWORD: 'ROOTPASS_PLACEHOLDER'
-      MYSQL_DATABASE: 'npm'
-      MYSQL_USER: npm
-      MYSQL_PASSWORD: 'NPMPASS_PLACEHOLDER'
-      MARIADB_AUTO_UPGRADE: '1'
-    volumes:
-      - ./data/mysql:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 3s
-      retries: 50
-      start_period: 20s
-
   npm_app:
-    image: jc21/nginx-proxy-manager:2.11.0
+    image: jc21/nginx-proxy-manager:latest
     container_name: npm_app
-    restart: always
+    restart: unless-stopped
     networks: [npm_net]
     ports: ["80:80", "443:443", "81:81"]
     environment:
@@ -797,44 +795,55 @@ services:
       npm_db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:81/"]
+      test: ["CMD", "curl", "-f", "http://localhost:81/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+  npm_db:
+    image: jc21/mariadb-aria:latest
+    container_name: npm_db
+    restart: unless-stopped
+    networks: [npm_net]
+    environment:
+      MYSQL_ROOT_PASSWORD: 'ROOTPASS_PLACEHOLDER'
+      MYSQL_DATABASE: 'npm'
+      MYSQL_USER: npm
+      MYSQL_PASSWORD: 'NPMPASS_PLACEHOLDER'
+      MARIADB_AUTO_UPGRADE: '1'
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "-u", "root", "-pROOTPASS_PLACEHOLDER"]
       interval: 10s
       timeout: 5s
-      retries: 20
-      start_period: 120s
+      retries: 30
+      start_period: 30s
 YAML_END
 sed -i "s|NPMPASS_PLACEHOLDER|${DB_NPM_PASS}|g;s|ROOTPASS_PLACEHOLDER|${DB_ROOT_PASS}|g" docker-compose.yml
-docker compose up -d 2>&1
-
-# Esperar inicial a que contenedores se levanten
-echo -e "${YELLOW}Esperando inicialización de servicios...${NC}"
-sleep 15
+docker compose up -d 2>&1 || { sleep 5; docker compose up -d; }
 
 # Esperar a que MariaDB esté lista
-echo -e "${YELLOW}Esperando base de datos...${NC}"
-for i in {1..120}; do
-  if docker exec npm_db mariadb-admin ping -h localhost -u root -p"${DB_ROOT_PASS}" &>/dev/null 2>&1; then
-    echo -e "${GREEN}✓ Base de datos lista${NC}"
+echo "Esperando a que la base de datos esté lista..."
+for i in {1..60}; do
+  if docker exec npm_db mariadb-admin ping -h 127.0.0.1 -u root -p"${DB_ROOT_PASS}" &>/dev/null 2>&1; then
+    echo "✓ Base de datos lista"
     break
   fi
-  echo -ne "."
-  sleep 1
-  if [[ $((i % 10)) -eq 0 ]]; then echo " ($i/120)"; fi
+  echo "Intento $i/60..."
+  sleep 2
 done
-echo ""
 
-# Esperar a que Nginx Proxy Manager esté listo (más tiempo para el frontend)
-echo -e "${YELLOW}Esperando Nginx Proxy Manager (esto puede tomar 2-3 minutos)...${NC}"
-for i in {1..180}; do
-  if docker exec npm_app curl -s http://localhost:81/ > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Nginx Proxy Manager listo${NC}"
+# Esperar a que Nginx Proxy Manager esté listo
+echo "Esperando a que Nginx Proxy Manager esté listo..."
+for i in {1..60}; do
+  if docker exec npm_app curl -s http://localhost:81 > /dev/null 2>&1; then
+    echo "✓ Nginx Proxy Manager listo"
     break
   fi
-  echo -ne "."
-  sleep 1
-  if [[ $((i % 10)) -eq 0 ]]; then echo " ($i/180)"; fi
+  echo "Intento $i/60..."
+  sleep 2
 done
-echo ""
 
 # Configurar autologin automático para root
 mkdir -p /etc/systemd/system/agetty@tty1.service.d
@@ -1041,7 +1050,7 @@ update_npm() {
     sleep 1
     
     echo -e "${YELLOW}2. Actualizando imágenes Docker...${NC}"
-    if pct exec $LAST_VMID -- bash -c "docker pull jc21/nginx-proxy-manager:2.11.0 && docker pull jc21/mariadb-aria:latest" &>/dev/null; then
+    if pct exec $LAST_VMID -- bash -c "docker pull jc21/nginx-proxy-manager:latest && docker pull jc21/mariadb-aria:latest" &>/dev/null; then
         echo -e "${GREEN}✓ Imágenes actualizadas${NC}"
     else
         echo -e "${RED}❌ Error al actualizar imágenes${NC}"
