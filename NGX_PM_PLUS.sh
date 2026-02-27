@@ -238,10 +238,15 @@ validate_template() {
     local all_storages
     all_storages=$(pvesm status 2>/dev/null | tail -n +2 | awk '{print $1}')
     
-    # Buscar templates en cada storage (buscar en vztmpl, no en images)
+    # Buscar templates en cada storage usando sintaxis correcta de pvesm
     for storage in $all_storages; do
-        templates=$(pvesm list "$storage:vztmpl" 2>/dev/null | grep -i "debian-13" | awk '{print $1}' | head -1)
-        if [[ -n "$templates" ]]; then
+        # Sintaxis correcta: pvesm list <storage> --content vztmpl
+        # El resultado es "storage:vztmpl/filename.tar.zst" → extraemos solo el filename
+        local raw_template
+        raw_template=$(pvesm list "$storage" --content vztmpl 2>/dev/null | grep -i "debian-13" | awk '{print $1}' | head -1)
+        if [[ -n "$raw_template" ]]; then
+            # Extraer solo el nombre de archivo (quitar prefijo "storage:vztmpl/")
+            templates=$(basename "${raw_template##*:vztmpl/}")
             template_storage="$storage"
             echo -e "${GREEN}✓ Template encontrado: $templates${NC}"
             echo -e "${GREEN}✓ Storage: ${template_storage}${NC}"
@@ -349,11 +354,13 @@ validate_template() {
                 "$max_attempts" \
                 "$(((max_attempts - attempt) * 10))"
             
-            # Buscar en pvesm
+            # Buscar en pvesm con sintaxis correcta
             local found=0
             for storage in $all_storages; do
-                templates=$(pvesm list "$storage:vztmpl" 2>/dev/null | grep -i "debian-13" | awk '{print $1}' | head -1)
-                if [[ -n "$templates" ]]; then
+                local raw_t
+                raw_t=$(pvesm list "$storage" --content vztmpl 2>/dev/null | grep -i "debian-13" | awk '{print $1}' | head -1)
+                if [[ -n "$raw_t" ]]; then
+                    templates=$(basename "${raw_t##*:vztmpl/}")
                     template_storage="$storage"
                     found=1
                     break
