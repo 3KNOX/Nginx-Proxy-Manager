@@ -241,8 +241,13 @@ validate_template() {
         local download_storage="local"
         echo -e "${YELLOW}2. Descargando template Debian 13...${NC}"
         
-        # Obtener el nombre exacto del template disponible
-        local debian_template=$(pveam available 2>/dev/null | grep "debian-13-standard" | tail -1 | awk '{print $1}')
+        # Obtener el nombre exacto del template disponible (segunda columna en la salida de pveam)
+        local debian_template=$(pveam available 2>/dev/null | grep "debian-13-standard" | tail -1 | awk '{print $2}')
+        
+        # Si no está en la segunda columna, intentar primera
+        if [[ -z "$debian_template" ]]; then
+            debian_template=$(pveam available 2>/dev/null | grep "debian-13-standard" | tail -1 | awk '{print $1}')
+        fi
         
         if [[ -z "$debian_template" ]]; then
             echo -e "${RED}❌ No hay templates Debian 13 disponibles${NC}"
