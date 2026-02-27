@@ -43,6 +43,25 @@ show_header() {
     echo ""
 }
 
+# Función estándar para mostrar menús
+show_menu() {
+    local title="$1"
+    shift
+    local options=("$@")
+    
+    show_header
+    echo -e "${CYAN}┌─ ${title} ─────────────────────────────────────────────┐${NC}"
+    echo ""
+    
+    for option in "${options[@]}"; do
+        echo -e "  $option"
+    done
+    
+    echo ""
+    echo -e "${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
+    echo ""
+}
+
 # ================ GESTIÓN DE CONFIGURACIÓN ================
 
 load_config() {
@@ -78,30 +97,37 @@ EOF
 }
 
 show_config() {
-    show_header
-    echo -e "${YELLOW}┌─ CONFIGURACIÓN GUARDADA ─────────────────────────────────┐${NC}"
-    echo ""
+    local options=(
+        "${CYAN}DATOS DEL CONTENEDOR:${NC}"
+        "  📌 VMID: ${GREEN}${LAST_VMID:-No guardado}${NC}"
+        "  📍 Hostname: ${GREEN}${LAST_HOSTNAME:-No guardado}${NC}"
+        "  🖧 Nodo: ${GREEN}${LAST_NODE:-No guardado}${NC}"
+        "  🌉 Bridge: ${GREEN}${LAST_BRIDGE:-No guardado}${NC}"
+        "  ⚙️  Perfil: ${GREEN}${LAST_PROFILE:-No guardado}${NC}"
+        ""
+        "${CYAN}URLs CONFIGURADAS:${NC}"
+        "  🔗 Docker: ${GREEN}${DOCKER_URL}${NC}"
+        "  🔗 Compose: ${GREEN}${COMPOSE_VERSION}${NC}"
+        "  🐳 Imagen NPM: ${GREEN}${NPM_IMAGE}${NC}"
+        "  📦 Imagen BD: ${GREEN}${DB_IMAGE}${NC}"
+        ""
+        "${RED}[0]${NC} ← Volver al menú anterior"
+    )
     
     if load_config; then
-        echo -e "  ${CYAN}DATOS DEL CONTENEDOR:${NC}"
-        echo -e "    📌 VMID: ${GREEN}${LAST_VMID:-No guardado}${NC}"
-        echo -e "    📍 Hostname: ${GREEN}${LAST_HOSTNAME:-No guardado}${NC}"
-        echo -e "    🖧 Nodo: ${GREEN}${LAST_NODE:-No guardado}${NC}"
-        echo -e "    🌉 Bridge: ${GREEN}${LAST_BRIDGE:-No guardado}${NC}"
-        echo -e "    ⚙️  Perfil: ${GREEN}${LAST_PROFILE:-No guardado}${NC}"
-        echo ""
-        echo -e "  ${CYAN}URLs CONFIGURADAS:${NC}"
-        echo -e "    🔗 Docker: ${GREEN}${DOCKER_URL}${NC}"
-        echo -e "    🔗 Compose: ${GREEN}${COMPOSE_VERSION}${NC}"
-        echo -e "    🐳 Imagen NPM: ${GREEN}${NPM_IMAGE}${NC}"
-        echo -e "    📦 Imagen BD: ${GREEN}${DB_IMAGE}${NC}"
+        show_menu "CONFIGURACIÓN GUARDADA" "${options[@]}"
     else
+        show_header
+        echo -e "${CYAN}┌─ CONFIGURACIÓN GUARDADA ────────────────────────────────┐${NC}"
+        echo ""
         echo -e "  ${YELLOW}⚠️  No hay configuración guardada aún${NC}"
+        echo ""
+        echo -e "${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
+        echo ""
+        echo -e "${RED}[0]${NC} ← Volver al menú anterior"
+        echo ""
     fi
     
-    echo ""
-    echo -e "${YELLOW}└──────────────────────────────────────────────────────────${NC}"
-    echo ""
     read -p "Presiona Enter para volver..."
 }
 
@@ -109,33 +135,38 @@ show_config() {
 
 edit_urls() {
     show_header
-    echo -e "${YELLOW}┌─ EDITAR URLs ────────────────────────────────────────────┐${NC}"
-    echo ""
     
     load_config || true
     
-    echo -e "  ${CYAN}URL actual Docker:${NC} ${GREEN}${DOCKER_URL:-$DEFAULT_DOCKER_URL}${NC}"
-    read -p "  Nueva URL Docker (Enter para mantener): " NEW_DOCKER_URL
+    echo -e "${CYAN}┌─ EDITAR URLs ────────────────────────────────────────────┐${NC}"
+    echo ""
+    echo -e "  ${YELLOW}URL Docker:${NC}"
+    echo -e "    Actual: ${GREEN}${DOCKER_URL:-$DEFAULT_DOCKER_URL}${NC}"
+    read -p "    Nueva (Enter para mantener): " NEW_DOCKER_URL
     [[ ! -z "$NEW_DOCKER_URL" ]] && DOCKER_URL="$NEW_DOCKER_URL" || DOCKER_URL="${DOCKER_URL:-$DEFAULT_DOCKER_URL}"
     
     echo ""
-    echo -e "  ${CYAN}Versión actual Compose:${NC} ${GREEN}${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}${NC}"
-    read -p "  Nueva versión (Enter para mantener): " NEW_COMPOSE_VERSION
+    echo -e "  ${YELLOW}Versión Compose:${NC}"
+    echo -e "    Actual: ${GREEN}${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}${NC}"
+    read -p "    Nueva (Enter para mantener): " NEW_COMPOSE_VERSION
     [[ ! -z "$NEW_COMPOSE_VERSION" ]] && COMPOSE_VERSION="$NEW_COMPOSE_VERSION" || COMPOSE_VERSION="${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}"
     
     echo ""
-    echo -e "  ${CYAN}Imagen NPM actual:${NC} ${GREEN}${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}${NC}"
-    read -p "  Nueva imagen (Enter para mantener): " NEW_NPM_IMAGE
+    echo -e "  ${YELLOW}Imagen NPM:${NC}"
+    echo -e "    Actual: ${GREEN}${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}${NC}"
+    read -p "    Nueva (Enter para mantener): " NEW_NPM_IMAGE
     [[ ! -z "$NEW_NPM_IMAGE" ]] && NPM_IMAGE="$NEW_NPM_IMAGE" || NPM_IMAGE="${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}"
     
     echo ""
-    echo -e "  ${CYAN}Imagen BD actual:${NC} ${GREEN}${DB_IMAGE:-$DEFAULT_DB_IMAGE}${NC}"
-    read -p "  Nueva imagen (Enter para mantener): " NEW_DB_IMAGE
+    echo -e "  ${YELLOW}Imagen BD:${NC}"
+    echo -e "    Actual: ${GREEN}${DB_IMAGE:-$DEFAULT_DB_IMAGE}${NC}"
+    read -p "    Nueva (Enter para mantener): " NEW_DB_IMAGE
     [[ ! -z "$NEW_DB_IMAGE" ]] && DB_IMAGE="$NEW_DB_IMAGE" || DB_IMAGE="${DB_IMAGE:-$DEFAULT_DB_IMAGE}"
     
-    save_config
-    
     echo ""
+    echo -e "${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
+    
+    save_config
     echo -e "${GREEN}✓ URLs actualizadas correctamente${NC}"
     sleep 2
 }
@@ -199,23 +230,81 @@ validate_node() {
 # ================ MENÚ PRINCIPAL ================
 
 show_main_menu() {
-    show_header
-    echo -e "${BLUE}┌─ MENÚ PRINCIPAL ──────────────────────────────────────────┐${NC}"
-    echo ""
-    echo -e "  ${GREEN}[1]${NC} 🟢 INSTALAR - Nivel NORMAL"
-    echo -e "  ${YELLOW}[2]${NC} 🟡 INSTALAR - Nivel MEDIA"
-    echo -e "  ${BLUE}[3]${NC} 🔵 INSTALAR - Nivel EXCELENTE"
-    echo ""
-    echo -e "  ${CYAN}[4]${NC} 🔄 REINSTALAR - Mantener datos"
-    echo -e "  ${CYAN}[5]${NC} ⬆️  ACTUALIZAR - Dependencias"
-    echo -e "  ${CYAN}[6]${NC} 🌐 EDITAR URLs - Cambiar links"
-    echo -e "  ${CYAN}[7]${NC} 📋 VER CONFIG - Mostrar guardada"
-    echo ""
-    echo -e "  ${RED}[0]${NC} ❌ SALIR"
-    echo ""
-    echo -e "${BLUE}└──────────────────────────────────────────────────────────${NC}"
-    echo ""
+    local options=(
+        "${GREEN}[1]${NC} 🟢 INSTALAR - Nginx Proxy Manager"
+        ""
+        "${CYAN}[4]${NC} 🔄 REINSTALAR - Mantener datos"
+        "${CYAN}[5]${NC} ⬆️  ACTUALIZAR - Dependencias"
+        "${CYAN}[6]${NC} 🌐 EDITAR URLs - Cambiar links"
+        "${CYAN}[7]${NC} 📋 VER CONFIG - Mostrar guardada"
+        ""
+        "${RED}[0]${NC} ❌ SALIR"
+    )
+    
+    show_menu "MENÚ PRINCIPAL" "${options[@]}"
     read -p "$(echo -e ${GREEN}Elige opción${NC}) (0-7): " MAIN_OPTION
+}
+
+# ================ MENÚ DE SELECCIÓN DE NIVEL ================
+
+show_level_menu() {
+    while true; do
+        local options=(
+            "${GREEN}[1]${NC} 🟢 NORMAL - Aplicaciones ligeras"
+            "      └─ RAM: 512 MB  | CPU: 1 core  | Disco: 10GB"
+            ""
+            "${YELLOW}[2]${NC} 🟡 MEDIA - Producción estándar"
+            "      └─ RAM: 1024 MB | CPU: 2 cores | Disco: 15GB"
+            ""
+            "${BLUE}[3]${NC} 🔵 EXCELENTE - Producción crítica"
+            "      └─ RAM: 2048 MB | CPU: 2 cores | Disco: 20GB + Backups ✓"
+            ""
+            "${RED}[0]${NC} ← Volver al menú anterior"
+        )
+        
+        show_menu "SELECCIONA NIVEL DE OPTIMIZACIÓN" "${options[@]}"
+        read -p "$(echo -e ${GREEN}Elige opción${NC}) (0-3): " LEVEL_OPTION
+        
+        case "$LEVEL_OPTION" in
+            1)
+                RAM=512
+                CPU=1
+                DISK=10
+                BACKUP="no"
+                PROFILE="🟢 NORMAL"
+                echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
+                sleep 1
+                return 0
+                ;;
+            2)
+                RAM=1024
+                CPU=2
+                DISK=15
+                BACKUP="no"
+                PROFILE="🟡 MEDIA"
+                echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
+                sleep 1
+                return 0
+                ;;
+            3)
+                RAM=2048
+                CPU=2
+                DISK=20
+                BACKUP="si"
+                PROFILE="🔵 EXCELENTE"
+                echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
+                sleep 1
+                return 0
+                ;;
+            0)
+                return 1
+                ;;
+            *)
+                echo -e "${RED}❌ Opción inválida${NC}"
+                sleep 1
+                ;;
+        esac
+    done
 }
 
 # ================ INSTALAR ================
@@ -256,10 +345,12 @@ install_npm() {
     echo -e "  RAM: ${GREEN}${RAM}MB${NC} | CPU: ${GREEN}${CPU}${NC} | Disco: ${GREEN}${DISK}GB${NC}"
     echo -e "${CYAN}════════════════════════════════${NC}"
     echo ""
+    echo -e "${YELLOW}Opciones:${NC}"
     read -p "¿Confirmas? (s/n): " CONFIRM
     
     if [[ "$CONFIRM" != "s" && "$CONFIRM" != "S" ]]; then
-        echo -e "${YELLOW}Instalación cancelada.${NC}"
+        echo -e "${YELLOW}Instalación cancelada - Volviendo al menú...${NC}"
+        sleep 2
         return 1
     fi
     
@@ -470,41 +561,21 @@ while true; do
     
     case "$MAIN_OPTION" in
         1)
-            show_header
-            RAM=512
-            CPU=1
-            DISK=10
-            BACKUP="no"
-            PROFILE="🟢 NORMAL"
-            echo -e "${GREEN}✓ Configuración seleccionada:${NC} ${PROFILE}"
-            install_npm
-            ;;
-        2)
-            show_header
-            RAM=1024
-            CPU=2
-            DISK=15
-            BACKUP="no"
-            PROFILE="🟡 MEDIA"
-            echo -e "${GREEN}✓ Configuración seleccionada:${NC} ${PROFILE}"
-            install_npm
-            ;;
-        3)
-            show_header
-            RAM=2048
-            CPU=2
-            DISK=20
-            BACKUP="si"
-            PROFILE="🔵 EXCELENTE"
-            echo -e "${GREEN}✓ Configuración seleccionada:${NC} ${PROFILE}"
-            install_npm
+            # Mostrar menú de niveles
+            if show_level_menu; then
+                # El usuario seleccionó un nivel
+                install_npm
+            fi
+            # Si retorna false (opción [0]), simplemente vuelve al menú principal
             ;;
         4)
+            show_header
             echo -e "${YELLOW}Función de reinstalación...${NC}"
             echo -e "${YELLOW}⚠️  Próximamente - Contacta al soporte${NC}"
             sleep 2
             ;;
         5)
+            show_header
             echo -e "${YELLOW}Función de actualización...${NC}"
             echo -e "${YELLOW}⚠️  Próximamente - Contacta al soporte${NC}"
             sleep 2
