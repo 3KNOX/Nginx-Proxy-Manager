@@ -13,6 +13,7 @@
 
 - ✅ **Menú interactivo** con 3 niveles de optimización (Normal, Media, Excelente)
 - ✅ **Creación automática** de contenedor LXC Debian 13
+- ✅ **Autodetección de almacenamiento** válido para LXC
 - ✅ **Docker + Docker Compose** instalados y configurados
 - ✅ **Nginx Proxy Manager** última versión con interfaz web
 - ✅ **MariaDB integrado** para persistencia de datos
@@ -238,6 +239,27 @@ Archivos generados:
 ---
 
 ## 🐛 Solución de Problemas
+
+### Error 400: Storage no soporta contenedores
+
+```
+400 Parameter verification failed.
+storage: storage 'local' does not support container directories
+```
+
+**Solución**: El script detecta automáticamente almacenamientos válidos (lvmthin, zfspool). Si ves este error:
+
+1. El script te pedirá que selecciones almacenamiento
+2. Si solo tienes `local` tipo `dir`, necesitas crear uno nuevo:
+
+```bash
+# Ver almacenamientos
+pvesm status --content images
+
+# Si solo ves 'local', consulta la guía: SOLUCION_ERROR_400.md
+```
+
+---
 
 ### El script no encuentra la plantilla Debian 13
 
