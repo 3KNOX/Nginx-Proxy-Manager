@@ -1,0 +1,39 @@
+# Archivos a ignorar en Git
+
+# Configuración local
+.npm_config
+.env
+.env.local
+
+# Logs
+*.log
+npm_installer.log
+
+# Temporales
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Directorios del sistema
+.git/
+.vscode/
+.idea/
+
+# Backups
+*.bak
+*.backup
+
+# Node (si aplica)
+node_modules/
+package-lock.json
+
+# Python (si aplica)
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+*.swp
