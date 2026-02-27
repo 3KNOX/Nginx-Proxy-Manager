@@ -622,6 +622,11 @@ install_npm() {
 #!/bin/bash
 set -e
 
+# Configurar locales para eliminar warnings
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export DEBIAN_FRONTEND=noninteractive
+
 echo 'Actualizando sistema...'
 apt update && apt upgrade -y
 apt install -y curl ca-certificates gnupg lsb-release sudo vim net-tools jq procps iputils-ping wget
@@ -635,14 +640,7 @@ if ! command -v docker &> /dev/null; then
   systemctl start docker
 fi
 
-echo 'Instalando Docker Compose...'
-if ! command -v docker-compose &> /dev/null; then
-  COMPOSE_VERSION=$COMPOSE_VERSION
-  curl -L https://github.com/docker/compose/releases/download/v\${COMPOSE_VERSION}/docker-compose-\$(uname -s)-\$(uname -m) -o /usr/local/bin/docker-compose 2>/dev/null || {
-    curl -L https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-\$(uname -s)-\$(uname -m) -o /usr/local/bin/docker-compose
-  }
-  chmod +x /usr/local/bin/docker-compose
-fi
+echo 'Docker Compose ya incluido en docker-compose-plugin'
 
 NPM_ROOT=/root/nginx-proxy-manager
 mkdir -p \$NPM_ROOT/{data/mysql,letsencrypt,backups}
@@ -713,7 +711,7 @@ COMPOSE
 
 echo 'Levantando contenedores con reintentos...'
 for i in {1..3}; do
-  if docker-compose up -d; then
+  if docker compose up -d; then
     echo 'Contenedores levantados exitosamente'
     break
   else
