@@ -1,6 +1,6 @@
 # 🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER
 
-![Version](https://img.shields.io/badge/version-2.8.4-green.svg)
+![Version](https://img.shields.io/badge/version-2.8.5-green.svg)
 ![Proxmox](https://img.shields.io/badge/proxmox-7.x%2F8.x%2F9.x-orange.svg)
 ![Creator](https://img.shields.io/badge/creator-3KNOX-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -20,7 +20,7 @@
 - ✅ **Creación automática** de contenedor LXC Debian 13 optimizado
 - ✅ **Autodetección de almacenamiento** válido para LXC (búsqueda en pvesm:vztmpl)
 - ✅ **Docker + Docker Compose plugin** (no legacy) instalados y configurados
-- ✅ **Nginx Proxy Manager** última versión con interfaz web intuitiva
+- ✅ **Nginx Proxy Manager v2.11.0** - Versión estable y confiable
 - ✅ **MariaDB Aria** para máximo rendimiento y persistencia
 - ✅ **SSL/TLS automático** con Let's Encrypt integrado
 - ✅ **Health checks avanzados** - espera inteligente para servicios
@@ -69,13 +69,13 @@ curl -fsSL https://raw.githubusercontent.com/3KNOX/Nginx-Proxy-Manager/refs/head
 
 ---
 
-## 📊 Menú Principal (V2.8.4)
+## 📊 Menú Principal (V2.8.5)
 
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
 ║     🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER 🚀         ║
-║                        v2.8.4                              ║
+║                        v2.8.5                              ║
 ║              Created by: 3KNOX                             ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
@@ -215,7 +215,7 @@ Contraseña: changeme
 
 ---
 
-## 💾 Gestión de Configuración (V2.8.4)
+## 💾 Gestión de Configuración (V2.8.5)
 
 El script guarda automáticamente tu configuración en:
 

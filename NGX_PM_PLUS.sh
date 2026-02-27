@@ -20,7 +20,7 @@ NC='\033[0m'
 
 CONFIG_FILE="/root/.npm_config"
 LOG_FILE="/root/npm_installer.log"
-SCRIPT_VERSION="2.8.4"
+SCRIPT_VERSION="2.8.5"
 
 # Constantes de formato
 MENU_WIDTH=59
@@ -32,7 +32,7 @@ MENU_BOT="${CYAN}└────────────────────
 # Valores por defecto de URLs
 DEFAULT_DOCKER_URL="https://get.docker.com"
 DEFAULT_COMPOSE_VERSION="2.20.0"
-DEFAULT_NPM_IMAGE="jc21/nginx-proxy-manager:latest"
+DEFAULT_NPM_IMAGE="jc21/nginx-proxy-manager:2.11.0"
 DEFAULT_DB_IMAGE="jc21/mariadb-aria:latest"
 
 ################################################################################
@@ -778,7 +778,7 @@ services:
       start_period: 20s
 
   npm_app:
-    image: jc21/nginx-proxy-manager:latest
+    image: jc21/nginx-proxy-manager:2.11.0
     container_name: npm_app
     restart: always
     networks: [npm_net]
@@ -1041,7 +1041,7 @@ update_npm() {
     sleep 1
     
     echo -e "${YELLOW}2. Actualizando imágenes Docker...${NC}"
-    if pct exec $LAST_VMID -- bash -c "docker pull jc21/nginx-proxy-manager:latest && docker pull jc21/mariadb-aria:latest" &>/dev/null; then
+    if pct exec $LAST_VMID -- bash -c "docker pull jc21/nginx-proxy-manager:2.11.0 && docker pull jc21/mariadb-aria:latest" &>/dev/null; then
         echo -e "${GREEN}✓ Imágenes actualizadas${NC}"
     else
         echo -e "${RED}❌ Error al actualizar imágenes${NC}"
