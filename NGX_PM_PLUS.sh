@@ -211,7 +211,7 @@ edit_urls() {
 validate_template() {
     echo -e "${YELLOW}Buscando templates Debian en todos los storages...${NC}"
     
-    # Buscar templates en TODOS los storages (no solo local)
+    # Buscar templates en TODOS los storages
     local templates=""
     local template_storage=""
     local all_storages=$(pvesm storage list 2>/dev/null | grep -v "^---" | awk '{print $1}')
@@ -225,69 +225,70 @@ validate_template() {
         fi
     done
     
+    # Si no hay templates, descargar automáticamente
     if [[ -z "$templates" ]]; then
         echo -e "${YELLOW}⏳ No hay templates. Descargando automáticamente...${NC}"
         echo ""
         
-        # Actualizar repositorio de templates
+        # Actualizar repositorio
         echo -e "${YELLOW}1. Actualizando repositorio de Proxmox...${NC}"
-        if pveam update &>/dev/null; then
-            echo -e "${GREEN}✓ Repositorio actualizado${NC}"
+        pveam update 2>&1 | tail -1
+        echo -e "${GREEN}✓ Repositorio actualizado${NC}"
+        
+        # Detectar storage válido
+        local download_storage="local"
+        if pvesm status "$download_storage" &>/dev/null; then
+            :
         else
-            echo -e "${RED}❌ Error al actualizar repositorio${NC}"
+            download_storage=$(pvesm storage list 2>/dev/null | grep -v "^---" | awk '{print $1}' | head -1)
+        fi
+        
+        echo -e "${YELLOW}2. Listando templates disponibles...${NC}"
+        
+        # Listar templates y seleccionar Debian 13
+        local debian_template=$(pveam available 2>/dev/null | grep -i "debian-13-standard" | tail -1)
+        
+        if [[ -z "$debian_template" ]]; then
+            echo -e "${RED}❌ No hay templates Debian 13 disponibles en Proxmox${NC}"
             return 1
         fi
         
-        # Encontrar storage válido (type dir)
-        local download_storage=$(pvesm status 2>/dev/null | grep "dir" | awk '{print $1}' | head -1)
-        if [[ -z "$download_storage" ]]; then
-            download_storage="local"
-        fi
+        # Extraer el nombre del template (primera columna)
+        local tmpl_name=$(echo "$debian_template" | awk '{print $1}')
+        echo -e "${CYAN}  → Descargando: $tmpl_name${NC}"
         
-        echo -e "${YELLOW}2. Descargando template Debian 13 en ${download_storage}...${NC}"
-        
-        # Get the list of available templates
-        local available_templates=$(pveam available 2>/dev/null | grep "debian-13" | head -5)
-        
-        if [[ -z "$available_templates" ]]; then
-            echo -e "${RED}❌ No hay templates Debian 13 disponibles${NC}"
-            return 1
-        fi
-        
-        # Try to download the first available template
-        local template_name=$(echo "$available_templates" | head -1 | awk '{print $1}')
-        
-        if [[ -z "$template_name" ]]; then
-            echo -e "${RED}❌ No se pudo extraer nombre del template${NC}"
-            return 1
-        fi
-        
-        echo -e "${CYAN}  Template encontrado: $template_name${NC}"
-        
-        # Download with proper error handling
-        if pveam download "$download_storage" "$template_name" 2>&1 | tail -1; then
-            echo -e "${GREEN}✓ Template descargado${NC}"
-        else
-            echo -e "${YELLOW}⚠️  Descarga completada (puede haber advertencias)${NC}"
-        fi
+        echo -e "${YELLOW}3. Descargando en $download_storage...${NC}"
+        pveam download "$download_storage" "$tmpl_name" 2>&1 | tail -2
+        echo -e "${GREEN}✓ Template descargado${NC}"
         
         echo ""
-        echo -e "${YELLOW}3. Buscando template descargado...${NC}"
-        sleep 2
+        echo -e "${YELLOW}4. Localizando template...${NC}"
+        sleep 1
         
-        # Buscar de nuevo
+        # Buscar template descargado
         for storage in $all_storages; do
             templates=$(pvesm content "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
             if [[ -n "$templates" ]]; then
                 template_storage="$storage"
-                echo -e "${GREEN}✓ Templates encontradas en: ${template_storage}${NC}"
+                echo -e "${GREEN}✓ Template disponible en: ${template_storage}${NC}"
                 break
             fi
         done
         
         if [[ -z "$templates" ]]; then
-            echo -e "${RED}❌ Template no disponible aún. Intenta en 1 minuto.${NC}"
-            return 1
+            echo -e "${RED}❌ Template descargado pero no se encuentra. Reintentar en 30 segundos.${NC}"
+            sleep 30
+            # Último intento
+            for storage in $all_storages; do
+                templates=$(pvesm content "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
+                if [[ -n "$templates" ]]; then
+                    template_storage="$storage"
+                    break
+                fi
+            done
+            if [[ -z "$templates" ]]; then
+                return 1
+            fi
         fi
     fi
     
