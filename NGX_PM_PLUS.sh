@@ -203,12 +203,26 @@ edit_urls() {
 ################################################################################
 
 validate_template() {
-    if ! ls /var/lib/vz/template/cache/debian-13-standard* &>/dev/null; then
-        echo -e "${RED}❌ Template Debian 13 no encontrada.${NC}"
-        echo -e "${YELLOW}Descárgala con: pveam update && pveam download local debian-13-standard_13.0-1_amd64.tar.gz${NC}"
-        return 1
+    echo -e "${YELLOW}Buscando template Debian 13...${NC}"
+    
+    # Buscar en todos los almacenamientos
+    if find /var/lib/vz/template/cache /mnt/pve -name "*debian-13-standard*" 2>/dev/null | grep -q "debian-13"; then
+        echo -e "${GREEN}✓ Template encontrada${NC}"
+        return 0
     fi
-    return 0
+    
+    echo -e "${RED}❌ Template Debian 13 no encontrada.${NC}"
+    echo -e "${YELLOW}Opciones para descargarla:${NC}"
+    echo ""
+    echo "  Opción 1: Mediante Proxmox UI"
+    echo "    - Ir a: Datacenter → Storage → local → Content"
+    echo "    - Buscar y descargar: debian-13-standard"
+    echo ""
+    echo "  Opción 2: Por terminal (root en Proxmox)"
+    echo "    pveam update"
+    echo "    pveam download local debian-13-standard_13.0-1_amd64.tar.gz"
+    echo ""
+    return 1
 }
 
 validate_internet() {
@@ -256,6 +270,50 @@ validate_node() {
     done
 }
 
+validate_storage() {
+    echo -e "${YELLOW}Detectando almacenamientos disponibles para LXC...${NC}"
+    
+    # Obtener almacenamientos que soportan LXC (lvmthin, zfspool, etc)
+    local STORAGES=$(pvesm status --content images | grep -E "lvmthin|zfspool|dir-" | awk '{print $1}' | head -5)
+    
+    if [[ -z "$STORAGES" ]]; then
+        echo -e "${RED}❌ No se encontraron almacenamientos válidos para LXC.${NC}"
+        echo -e "${YELLOW}Almacenamientos disponibles (solo lectura):${NC}"
+        pvesm status --content images | awk '{print "  " $1}'
+        return 1
+    fi
+    
+    local STORAGE_ARRAY=($STORAGES)
+    
+    if [[ ${#STORAGE_ARRAY[@]} -eq 1 ]]; then
+        STORAGE="${STORAGE_ARRAY[0]}"
+        echo -e "${GREEN}✓ Almacenamiento seleccionado automáticamente: ${STORAGE}${NC}"
+        return 0
+    fi
+    
+    # Si hay múltiples, permitir seleccionar
+    echo -e "${CYAN}Almacenamientos disponibles:${NC}"
+    local i=1
+    for storage in "${STORAGE_ARRAY[@]}"; do
+        echo "  [$i] $storage"
+        ((i++))
+    done
+    
+    while true; do
+        read -p "$(echo -e ${YELLOW}Elige almacenamiento${NC}) (1-$((i-1))): " STORAGE_CHOICE
+        
+        if [[ "$STORAGE_CHOICE" =~ ^[0-9]+$ ]] && [[ $STORAGE_CHOICE -ge 1 ]] && [[ $STORAGE_CHOICE -lt $i ]]; then
+            STORAGE="${STORAGE_ARRAY[$((STORAGE_CHOICE-1))]}"
+            echo -e "${GREEN}✓ Almacenamiento: ${STORAGE}${NC}"
+            break
+        else
+            echo -e "${RED}❌ Opción inválida.${NC}"
+        fi
+    done
+    
+    return 0
+}
+
 ################################################################################
 # SECCIÓN 6: FUNCIÓN PRINCIPAL DE INSTALACIÓN
 ################################################################################
@@ -269,6 +327,7 @@ install_npm() {
     validate_vmid
     validate_hostname
     validate_node
+    validate_storage || return 1
     
     read -p "$(echo -e ${YELLOW}Bridge de red${NC}) (default vmbr0): " BRIDGE
     BRIDGE=${BRIDGE:-vmbr0}
@@ -314,13 +373,13 @@ install_npm() {
     
     # Crear contenedor
     echo -e "${CYAN}Creando contenedor LXC Debian 13...${NC}"
-    TEMPLATE="local:vztmpl/debian-13-standard_13.0-1_amd64.tar.gz"
+    TEMPLATE="debian-13-standard_13.0-1_amd64.tar.gz"
     
-    pct create $CTID $TEMPLATE \
+    pct create $CTID $STORAGE:vztmpl/$TEMPLATE \
         --cores $CPU \
         --memory $RAM \
         --swap 512 \
-        --rootfs local:$DISK \
+        --rootfs $STORAGE:$DISK \
         --net0 name=eth0,bridge=$BRIDGE,ip=dhcp \
         --hostname $HOSTNAME \
         --password "$DB_ROOT_PASS" \
