@@ -132,16 +132,14 @@ show_main_menu() {
         "${YELLOW}[2]${NC} 🟡 INSTALAR - Nivel MEDIA (1GB RAM | 2 CPU | 15GB)"
         "${BLUE}[3]${NC} 🔵 INSTALAR - Nivel EXCELENTE (2GB RAM | 2 CPU | 20GB + Backups)"
         ""
-        "${CYAN}[4]${NC} 🔄 REINSTALAR - Mantener datos"
-        "${CYAN}[5]${NC} ⬆️  ACTUALIZAR - Dependencias"
-        "${CYAN}[6]${NC} 🌐 EDITAR URLs - Cambiar links"
-        "${CYAN}[7]${NC} 📋 VER CONFIG - Mostrar guardada"
+        "${CYAN}[4]${NC} 🔄 REINSTALAR - Limpiar y recrear contenedor"
+        "${CYAN}[5]${NC} ⬆️  ACTUALIZAR - Sistema + Docker + Imágenes"
         ""
         "${RED}[0]${NC} ❌ SALIR"
     )
     
     show_menu "MENÚ PRINCIPAL" "${options[@]}"
-    read -p "$(echo -e "${GREEN}Elige opción${NC}") (0-7): " MAIN_OPTION
+    read -p "$(echo -e "${GREEN}Elige opción${NC}") (0-5): " MAIN_OPTION
 }
 
 show_config() {
@@ -813,6 +811,140 @@ SCRIPT_END
 }
 
 ################################################################################
+# SECCIÓN 6B: FUNCIÓN REINSTALAR
+################################################################################
+
+reinstall_npm() {
+    show_header
+    
+    load_config || {
+        echo -e "${RED}❌ No hay configuración guardada${NC}"
+        echo -e "${YELLOW}ℹ️  Primero instala un contenedor con [1], [2] o [3]${NC}"
+        sleep 2
+        return
+    }
+    
+    echo -e "$MENU_TOP"
+    echo -e "  🔄 REINSTALAR CONTENEDOR"
+    echo -e "$MENU_BOT"
+    echo ""
+    
+    echo -e "${YELLOW}⚠️  ADVERTENCIA:${NC}"
+    echo -e "  Este proceso va a:"
+    echo -e "  1. Destruir el contenedor VMID $LAST_VMID (${LAST_HOSTNAME})"
+    echo -e "  2. Recrearlo desde cero manteniendo la configuración"
+    echo -e "  3. Reinstalar Docker, imágenes y servicios"
+    echo ""
+    
+    read -p "¿Estás seguro? (s/n): " confirm
+    [[ "$confirm" != "s" ]] && return
+    echo ""
+    
+    echo -e "${YELLOW}Destruyendo contenedor...${NC}"
+    if pct destroy "$LAST_VMID" 2>&1; then
+        echo -e "${GREEN}✓ Contenedor destruido${NC}"
+    else
+        echo -e "${RED}❌ Error al destruir contenedor${NC}"
+        sleep 2
+        return 1
+    fi
+    
+    sleep 2
+    
+    echo -e "${YELLOW}Recreando contenedor con la misma configuración...${NC}"
+    CTID="$LAST_VMID"
+    HOSTNAME="$LAST_HOSTNAME"
+    NODE="$LAST_NODE"
+    STORAGE="$LAST_STORAGE"
+    BRIDGE="$LAST_BRIDGE"
+    
+    # Reconfigurar RAM/CPU/DISK según perfil
+    case "$LAST_PROFILE" in
+        *NORMAL*) RAM=512; CPU=1; DISK=10; BACKUP="no" ;;
+        *MEDIA*) RAM=1024; CPU=2; DISK=15; BACKUP="no" ;;
+        *EXCELENTE*) RAM=2048; CPU=2; DISK=20; BACKUP="si" ;;
+    esac
+    
+    PROFILE="$LAST_PROFILE"
+    
+    # Ejecutar instalación
+    install_npm
+}
+
+################################################################################
+# SECCIÓN 6C: FUNCIÓN ACTUALIZAR
+################################################################################
+
+update_npm() {
+    show_header
+    
+    load_config || {
+        echo -e "${RED}❌ No hay configuración guardada${NC}"
+        echo -e "${YELLOW}ℹ️  Primero instala un contenedor con [1], [2] o [3]${NC}"
+        sleep 2
+        return
+    }
+    
+    echo -e "$MENU_TOP"
+    echo -e "  ⬆️  ACTUALIZAR SISTEMA Y SERVICIOS"
+    echo -e "$MENU_BOT"
+    echo ""
+    
+    if ! pct exec $LAST_VMID -- hostname &>/dev/null; then
+        echo -e "${RED}❌ Contenedor VMID $LAST_VMID no responde${NC}"
+        sleep 2
+        return 1
+    fi
+    
+    echo -e "${YELLOW}Containers actualizado:${NC}"
+    echo -e "  📌 VMID: ${GREEN}${LAST_VMID}${NC}"
+    echo -e "  🏠 Hostname: ${GREEN}${LAST_HOSTNAME}${NC}"
+    echo ""
+    
+    read -p "¿Actualizar sistema + Docker + imágenes? (s/n): " confirm
+    [[ "$confirm" != "s" ]] && return
+    echo ""
+    
+    echo -e "${YELLOW}1. Actualizando sistema Debian...${NC}"
+    if pct exec $LAST_VMID -- bash -c "apt update && apt upgrade -y" &>/dev/null; then
+        echo -e "${GREEN}✓ Sistema actualizado${NC}"
+    else
+        echo -e "${RED}❌ Error en actualización de sistema${NC}"
+    fi
+    
+    sleep 1
+    
+    echo -e "${YELLOW}2. Actualizando imágenes Docker...${NC}"
+    if pct exec $LAST_VMID -- bash -c "docker pull jc21/nginx-proxy-manager:latest && docker pull jc21/mariadb-aria:latest" &>/dev/null; then
+        echo -e "${GREEN}✓ Imágenes actualizadas${NC}"
+    else
+        echo -e "${RED}❌ Error al actualizar imágenes${NC}"
+    fi
+    
+    sleep 1
+    
+    echo -e "${YELLOW}3. Reiniciando servicios...${NC}"
+    if pct exec $LAST_VMID -- bash -c "cd /root/nginx-proxy-manager && docker compose up -d" &>/dev/null; then
+        echo -e "${GREEN}✓ Servicios reiniciados${NC}"
+    else
+        echo -e "${RED}❌ Error al reiniciar servicios${NC}"
+    fi
+    
+    sleep 2
+    
+    echo ""
+    echo -e "${GREEN}✅ ACTUALIZACIÓN COMPLETADA${NC}"
+    echo ""
+    
+    # Mostrar status
+    echo -e "${CYAN}Estado de contenedores:${NC}"
+    pct exec $LAST_VMID -- docker ps
+    
+    echo ""
+    read -p "Presiona Enter para volver al menú..."
+}
+
+################################################################################
 # SECCIÓN 7: LAZO PRINCIPAL
 ################################################################################
 
@@ -832,28 +964,18 @@ while true; do
             RAM=2048; CPU=2; DISK=20; BACKUP="si"; PROFILE="🔵 EXCELENTE"
             echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}" && sleep 1 && install_npm
             ;;
-        4|5)
-            show_header
-            local feature=$([[ "$MAIN_OPTION" == "4" ]] && echo "REINSTALAR" || echo "ACTUALIZAR")
-            local icon=$([[ "$MAIN_OPTION" == "4" ]] && echo "🔄" || echo "⬆️")
-            echo -e "$MENU_TOP"
-            echo -e "  ${icon} ${feature} - En desarrollo (Fase 2)"
-            echo -e "  ${YELLOW}ℹ️  Esta función estará disponible pronto${NC}"
-            echo -e "$MENU_BOT"
-            sleep 2
+        4)
+            reinstall_npm
             ;;
-        6)
-            edit_urls
-            ;;
-        7)
-            show_config
+        5)
+            update_npm
             ;;
         0)
             echo -e "${YELLOW}Saliendo...${NC}"
             exit 0
             ;;
         *)
-            echo -e "${RED}❌ Opción inválida (0-7)${NC}"
+            echo -e "${RED}❌ Opción inválida (0-5)${NC}"
             sleep 1
             ;;
     esac
