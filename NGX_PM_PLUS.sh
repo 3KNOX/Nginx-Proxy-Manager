@@ -196,58 +196,6 @@ validate_node() {
     done
 }
 
-# ================ MENÚ DE OPTIMIZACIÓN ================
-
-show_optimization_menu() {
-    while true; do
-        echo -e "${YELLOW}┌─ CONFIGURACIÓN DE RECURSOS ─────────────────────────────┐${NC}"
-        echo ""
-        echo -e "  ${GREEN}[1]${NC} 🟢 NORMAL - ${CYAN}Aplicaciones ligeras${NC}"
-        echo "      └─ RAM: 512 MB  | CPU: 1 core  | Disco: 10GB"
-        echo ""
-        echo -e "  ${YELLOW}[2]${NC} 🟡 MEDIA - ${CYAN}Producción estándar${NC}"
-        echo "      └─ RAM: 1024 MB | CPU: 2 cores | Disco: 15GB"
-        echo ""
-        echo -e "  ${GREEN}[3]${NC} 🔵 EXCELENTE - ${CYAN}Producción crítica${NC}"
-        echo "      └─ RAM: 2048 MB | CPU: 2 cores | Disco: 20GB + Backups ✓"
-        echo ""
-        echo -e "${YELLOW}└────────────────────────────────────────────────────────${NC}"
-        echo ""
-        read -p "$(echo -e ${GREEN}Elige opción${NC}) (1-3): " OPT_LEVEL
-        
-        if [[ "$OPT_LEVEL" =~ ^[1-3]$ ]]; then
-            break
-        else
-            echo -e "${RED}❌ Opción inválida.${NC}"
-            sleep 1
-        fi
-    done
-    
-    case "$OPT_LEVEL" in
-        1)
-            RAM=512
-            CPU=1
-            DISK=10
-            BACKUP="no"
-            PROFILE="🟢 NORMAL"
-            ;;
-        2)
-            RAM=1024
-            CPU=2
-            DISK=15
-            BACKUP="no"
-            PROFILE="🟡 MEDIA"
-            ;;
-        3)
-            RAM=2048
-            CPU=2
-            DISK=20
-            BACKUP="si"
-            PROFILE="🔵 EXCELENTE"
-            ;;
-    esac
-}
-
 # ================ MENÚ PRINCIPAL ================
 
 show_main_menu() {
@@ -523,7 +471,11 @@ while true; do
     case "$MAIN_OPTION" in
         1)
             show_header
-            show_optimization_menu
+            RAM=512
+            CPU=1
+            DISK=10
+            BACKUP="no"
+            PROFILE="🟢 NORMAL"
             echo -e "${GREEN}✓ Configuración seleccionada:${NC} ${PROFILE}"
             install_npm
             ;;
