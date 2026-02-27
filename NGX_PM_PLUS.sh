@@ -22,6 +22,13 @@ CONFIG_FILE="/root/.npm_config"
 LOG_FILE="/root/npm_installer.log"
 SCRIPT_VERSION="2.0"
 
+# Constantes de formato
+MENU_WIDTH=59
+HEADER_TOP="${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
+HEADER_BOT="${CYAN}╚════════════════════════════════════════════════════════════╝${NC}"
+MENU_TOP="${CYAN}┌───────────────────────────────────────────────────────────┐${NC}"
+MENU_BOT="${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
+
 # Valores por defecto de URLs
 DEFAULT_DOCKER_URL="https://get.docker.com"
 DEFAULT_COMPOSE_VERSION="2.20.0"
@@ -38,13 +45,13 @@ log_message() {
 
 show_header() {
     clear
-    echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "$HEADER_TOP"
     echo -e "${CYAN}║${NC}                                                            ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}     🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER 🚀         ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}                        v${SCRIPT_VERSION}                              ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}              Created by: ${GREEN}3KNOX${CYAN}                        ║${NC}"
     echo -e "${CYAN}║${NC}                                                            ${CYAN}║${NC}"
-    echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "$HEADER_BOT"
     echo ""
 }
 
@@ -55,7 +62,9 @@ show_menu() {
     local options=("$@")
     
     show_header
-    echo -e "${CYAN}┌─ ${title} ─────────────────────────────────────────────┐${NC}"
+    # Calcular espacios para centración
+    local title_spaces=$((($MENU_WIDTH - ${#title}) / 2))
+    printf "${CYAN}┌─ %*s%-*s ─┐${NC}\n" "$title_spaces" "" "$((${#title} + title_spaces))" "$title"
     echo ""
     
     for option in "${options[@]}"; do
@@ -63,7 +72,7 @@ show_menu() {
     done
     
     echo ""
-    echo -e "${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
+    echo -e "$MENU_BOT"
     echo ""
 }
 
@@ -143,20 +152,12 @@ show_config() {
         "${RED}[0]${NC} ← Volver al menú anterior"
     )
     
-    if load_config; then
-        show_menu "CONFIGURACIÓN GUARDADA" "${options[@]}"
-    else
-        show_header
-        echo -e "${CYAN}┌─ CONFIGURACIÓN GUARDADA ────────────────────────────────┐${NC}"
-        echo ""
-        echo -e "  ${YELLOW}⚠️  No hay configuración guardada aún${NC}"
-        echo ""
-        echo -e "${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
-        echo ""
-        echo -e "${RED}[0]${NC} ← Volver al menú anterior"
-        echo ""
+    if ! load_config; then
+        options[0]="${YELLOW}⚠️  No hay configuración guardada aún${NC}"
+        options=( "${options[@]:0:1}" )
     fi
     
+    show_menu "CONFIGURACIÓN GUARDADA" "${options[@]}"
     read -p "Presiona Enter para volver..."
 }
 
@@ -165,33 +166,38 @@ edit_urls() {
     
     load_config || true
     
-    echo -e "${CYAN}┌─ EDITAR URLs ────────────────────────────────────────────┐${NC}"
+    echo -e "$MENU_TOP"
     echo ""
-    echo -e "  ${YELLOW}URL Docker:${NC}"
-    echo -e "    Actual: ${GREEN}${DOCKER_URL:-$DEFAULT_DOCKER_URL}${NC}"
-    read -p "    Nueva (Enter para mantener): " NEW_DOCKER_URL
-    [[ ! -z "$NEW_DOCKER_URL" ]] && DOCKER_URL="$NEW_DOCKER_URL" || DOCKER_URL="${DOCKER_URL:-$DEFAULT_DOCKER_URL}"
+    
+    local fields=("URL Docker" "COMPOSE_VERSION" "NPM_IMAGE" "DB_IMAGE")
+    local defaults=("$DEFAULT_DOCKER_URL" "$DEFAULT_COMPOSE_VERSION" "$DEFAULT_NPM_IMAGE" "$DEFAULT_DB_IMAGE")
+    local current=("${DOCKER_URL:-$DEFAULT_DOCKER_URL}" "${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}" "${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}" "${DB_IMAGE:-$DEFAULT_DB_IMAGE}")
+    
+    echo -e "  ${YELLOW}${fields[0]}:${NC}"
+    echo -e "    Actual: ${GREEN}${current[0]}${NC}"
+    read -p "    Nueva (Enter para mantener): " input
+    DOCKER_URL="${input:-${current[0]}}"
+    
+    for i in 1 2 3; do
+        echo ""
+        label="${fields[$i]}"
+        [[ "$label" == "COMPOSE_VERSION" ]] && label="Versión Compose"
+        [[ "$label" == "NPM_IMAGE" ]] && label="Imagen NPM"
+        [[ "$label" == "DB_IMAGE" ]] && label="Imagen BD"
+        
+        echo -e "  ${YELLOW}${label}:${NC}"
+        echo -e "    Actual: ${GREEN}${current[$i]}${NC}"
+        read -p "    Nueva (Enter para mantener): " input
+        
+        case $i in
+            1) COMPOSE_VERSION="${input:-${current[$i]}}" ;;
+            2) NPM_IMAGE="${input:-${current[$i]}}" ;;
+            3) DB_IMAGE="${input:-${current[$i]}}" ;;
+        esac
+    done
     
     echo ""
-    echo -e "  ${YELLOW}Versión Compose:${NC}"
-    echo -e "    Actual: ${GREEN}${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}${NC}"
-    read -p "    Nueva (Enter para mantener): " NEW_COMPOSE_VERSION
-    [[ ! -z "$NEW_COMPOSE_VERSION" ]] && COMPOSE_VERSION="$NEW_COMPOSE_VERSION" || COMPOSE_VERSION="${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}"
-    
-    echo ""
-    echo -e "  ${YELLOW}Imagen NPM:${NC}"
-    echo -e "    Actual: ${GREEN}${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}${NC}"
-    read -p "    Nueva (Enter para mantener): " NEW_NPM_IMAGE
-    [[ ! -z "$NEW_NPM_IMAGE" ]] && NPM_IMAGE="$NEW_NPM_IMAGE" || NPM_IMAGE="${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}"
-    
-    echo ""
-    echo -e "  ${YELLOW}Imagen BD:${NC}"
-    echo -e "    Actual: ${GREEN}${DB_IMAGE:-$DEFAULT_DB_IMAGE}${NC}"
-    read -p "    Nueva (Enter para mantener): " NEW_DB_IMAGE
-    [[ ! -z "$NEW_DB_IMAGE" ]] && DB_IMAGE="$NEW_DB_IMAGE" || DB_IMAGE="${DB_IMAGE:-$DEFAULT_DB_IMAGE}"
-    
-    echo ""
-    echo -e "${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
+    echo -e "$MENU_BOT"
     
     save_config
     echo -e "${GREEN}✓ URLs actualizadas correctamente${NC}"
@@ -233,41 +239,45 @@ validate_internet() {
     return 0
 }
 
-validate_vmid() {
+# Función genérica de validación interactiva
+validate_input() {
+    local prompt="$1"
+    local variable_name="$2"
+    local pattern="${3:-.+}"  # Por defecto acepta cualquier cosa no vacía
+    local error_msg="${4:-Valor inválido}"
+    local example="${5}"
+    
     while true; do
-        read -p "$(echo -e ${YELLOW}VMID del contenedor${NC}) (ej: 9000): " CTID
-        if [[ "$CTID" =~ ^[0-9]{3,5}$ ]]; then
-            if pct status $CTID &>/dev/null; then
-                echo -e "${RED}❌ El VMID $CTID ya existe. Por favor usa otro.${NC}"
-            else
-                break
-            fi
+        if [[ -n "$example" ]]; then
+            read -p "$(echo -e "${YELLOW}${prompt}${NC} (ej: ${example}): ")" value
         else
-            echo -e "${RED}❌ VMID inválido. Usa números entre 100-99999.${NC}"
+            read -p "$(echo -e "${YELLOW}${prompt}${NC}: ")" value
+        fi
+        
+        if [[ "$value" =~ $pattern ]]; then
+            eval "$variable_name='$value'"
+            break
+        else
+            echo -e "${RED}❌ $error_msg${NC}"
         fi
     done
+}
+
+validate_vmid() {
+    validate_input "VMID del contenedor" "CTID" "^[0-9]{3,5}$" "VMID inválido. Usa números entre 100-99999" "9000"
+    # Verificar si ya existe
+    if pct status $CTID &>/dev/null; then
+        echo -e "${RED}❌ El VMID $CTID ya existe. Por favor usa otro.${NC}"
+        validate_vmid  # Reintentar
+    fi
 }
 
 validate_hostname() {
-    while true; do
-        read -p "$(echo -e ${YELLOW}Nombre del contenedor${NC}) (hostname, ej: npm-prod): " HOSTNAME
-        if [[ -z "$HOSTNAME" ]]; then
-            echo -e "${RED}❌ El hostname no puede estar vacío.${NC}"
-        else
-            break
-        fi
-    done
+    validate_input "Nombre del contenedor" "HOSTNAME" ".+" "El hostname no puede estar vacío" "npm-prod"
 }
 
 validate_node() {
-    while true; do
-        read -p "$(echo -e ${YELLOW}Nodo de Proxmox${NC}) (ej: pve): " NODE
-        if [[ -z "$NODE" ]]; then
-            echo -e "${RED}❌ El nodo no puede estar vacío.${NC}"
-        else
-            break
-        fi
-    done
+    validate_input "Nodo de Proxmox" "NODE" ".+" "El nodo no puede estar vacío" "pve"
 }
 
 validate_storage() {
@@ -329,7 +339,7 @@ install_npm() {
     validate_node
     validate_storage || return 1
     
-    read -p "$(echo -e ${YELLOW}Bridge de red${NC}) (default vmbr0): " BRIDGE
+    read -p "$(echo -e "${YELLOW}Bridge de red${NC}") (default vmbr0): " BRIDGE
     BRIDGE=${BRIDGE:-vmbr0}
     
     echo ""
@@ -337,26 +347,22 @@ install_npm() {
     echo -e "${YELLOW}CREDENCIALES DE SEGURIDAD${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo ""
-    read -sp "$(echo -e ${YELLOW}Contraseña ROOT para MariaDB${NC}): " DB_ROOT_PASS
+    read -sp "$(echo -e "${YELLOW}Contraseña ROOT para MariaDB${NC}") : " DB_ROOT_PASS
     echo ""
-    read -p "$(echo -e ${YELLOW}Usuario NPM para base de datos${NC}) (default: npm): " DB_NPM_USER
-    DB_NPM_USER=${DB_NPM_USER:-npm}
-    read -sp "$(echo -e ${YELLOW}Contraseña NPM para la base de datos${NC}): " DB_NPM_PASS
+    read -sp "$(echo -e "${YELLOW}Contraseña NPM para la base de datos${NC}") : " DB_NPM_PASS
     echo ""
     
     # Mostrar resumen
     echo ""
-    echo -e "${CYAN}╔════ RESUMEN DE INSTALACIÓN ════╗${NC}"
-    echo -e "  VMID: ${GREEN}$CTID${NC}"
-    echo -e "  Hostname: ${GREEN}$HOSTNAME${NC}"
-    echo -e "  Nodo: ${GREEN}$NODE${NC}"
-    echo -e "  Bridge: ${GREEN}$BRIDGE${NC}"
-    echo -e "  Perfil: ${GREEN}$PROFILE${NC}"
-    echo -e "  RAM: ${GREEN}${RAM}MB${NC} | CPU: ${GREEN}${CPU}${NC} | Disco: ${GREEN}${DISK}GB${NC}"
-    echo -e "${CYAN}════════════════════════════════${NC}"
-    echo ""
-    echo -e "${YELLOW}Opciones:${NC}"
-    read -p "¿Confirmas? (s/n): " CONFIRM
+    echo -e "$HEADER_TOP"
+    echo -e "${CYAN}║${NC}  ${YELLOW}RESUMEN DE INSTALACIÓN${NC}                              ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  VMID: ${GREEN}$CTID${NC}          Hostname: ${GREEN}$HOSTNAME${NC}${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  Nodo: ${GREEN}$NODE${NC}          Bridge: ${GREEN}$BRIDGE${NC}${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  RAM: ${GREEN}${RAM}MB${NC} | CPU: ${GREEN}${CPU}${NC} | Disco: ${GREEN}${DISK}GB${NC}      ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  Perfil: ${GREEN}${PROFILE}${NC}                                  ${CYAN}║${NC}"
+    echo -e "$HEADER_BOT"
+    echo -e "${YELLOW}¿Confirmas la instalación? (s/n):${NC} "
+    read CONFIRM
     
     if [[ "$CONFIRM" != "s" && "$CONFIRM" != "S" ]]; then
         echo -e "${YELLOW}Instalación cancelada - Volviendo al menú...${NC}"
@@ -542,22 +548,20 @@ EOF"
     
     # Resumen
     echo ""
-    echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║${NC}            ✅ INSTALACIÓN COMPLETADA EXITOSAMENTE ✅     ${GREEN}║${NC}"
-    echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}$HEADER_TOP${NC}"
+    echo -e "${GREEN}║${NC}     ✅ INSTALACIÓN COMPLETADA EXITOSAMENTE ✅            ${GREEN}║${NC}"
+    echo -e "${GREEN}$HEADER_BOT${NC}"
     echo ""
-    echo -e "${CYAN}┌─ INFORMACIÓN DE ACCESO ───────────────────────────────────┐${NC}"
+    echo -e "$MENU_TOP"
+    echo -e "  ${CYAN}INFORMACIÓN DE ACCESO${NC}"
     echo -e "  🌐 URL: ${GREEN}http://${CONTAINER_IP}:81${NC}"
     echo -e "  👤 Usuario: ${GREEN}admin@example.com${NC}"
     echo -e "  🔑 Contraseña: ${GREEN}changeme${NC}"
-    echo -e "${CYAN}└────────────────────────────────────────────────────────────${NC}"
-    echo ""
-    echo -e "${CYAN}┌─ DETALLES DEL CONTENEDOR ─────────────────────────────────┐${NC}"
-    echo -e "  📌 VMID: ${GREEN}${CTID}${NC}"
-    echo -e "  📍 Hostname: ${GREEN}${HOSTNAME}${NC}"
-    echo -e "  🖧 IP: ${GREEN}${CONTAINER_IP}${NC}"
-    echo -e "  ⚙️  Perfil: ${GREEN}${PROFILE}${NC}"
-    echo -e "${CYAN}└────────────────────────────────────────────────────────────${NC}"
+    echo -e ""
+    echo -e "  ${CYAN}DETALLES DEL CONTENEDOR${NC}"
+    echo -e "  📌 VMID: ${GREEN}${CTID}${NC}       📍 Hostname: ${GREEN}${HOSTNAME}${NC}"
+    echo -e "  🖧 IP: ${GREEN}${CONTAINER_IP}${NC}        ⚙️  Perfil: ${GREEN}${PROFILE}${NC}"
+    echo -e "$MENU_BOT"
     echo ""
     
     log_message "Instalación completada - VMID: $CTID, IP: $CONTAINER_IP"
@@ -571,60 +575,27 @@ EOF"
 while true; do
     show_main_menu
     
-    case "$MAIN_OPTION" in
+    case "${MAIN_OPTION}" in
         1)
-            # INSTALAR - Nivel NORMAL
-            RAM=512
-            CPU=1
-            DISK=10
-            BACKUP="no"
-            PROFILE="🟢 NORMAL"
-            echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
-            sleep 1
-            install_npm
+            RAM=512; CPU=1; DISK=10; BACKUP="no"; PROFILE="🟢 NORMAL"
+            echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}" && sleep 1 && install_npm
             ;;
         2)
-            # INSTALAR - Nivel MEDIA
-            RAM=1024
-            CPU=2
-            DISK=15
-            BACKUP="no"
-            PROFILE="🟡 MEDIA"
-            echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
-            sleep 1
-            install_npm
+            RAM=1024; CPU=2; DISK=15; BACKUP="no"; PROFILE="🟡 MEDIA"
+            echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}" && sleep 1 && install_npm
             ;;
         3)
-            # INSTALAR - Nivel EXCELENTE
-            RAM=2048
-            CPU=2
-            DISK=20
-            BACKUP="si"
-            PROFILE="🔵 EXCELENTE"
-            echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
-            sleep 1
-            install_npm
+            RAM=2048; CPU=2; DISK=20; BACKUP="si"; PROFILE="🔵 EXCELENTE"
+            echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}" && sleep 1 && install_npm
             ;;
-        4)
+        4|5)
             show_header
-            echo -e "${CYAN}┌─ REINSTALAR ──────────────────────────────────────────────┐${NC}"
-            echo ""
-            echo -e "  ${YELLOW}Función de reinstalación...${NC}"
-            echo -e "  ${YELLOW}⚠️  Próximamente - Contacta al soporte${NC}"
-            echo ""
-            echo -e "${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
-            echo ""
-            sleep 2
-            ;;
-        5)
-            show_header
-            echo -e "${CYAN}┌─ ACTUALIZAR ──────────────────────────────────────────────┐${NC}"
-            echo ""
-            echo -e "  ${YELLOW}Función de actualización...${NC}"
-            echo -e "  ${YELLOW}⚠️  Próximamente - Contacta al soporte${NC}"
-            echo ""
-            echo -e "${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
-            echo ""
+            local feature=$([[ "$MAIN_OPTION" == "4" ]] && echo "REINSTALAR" || echo "ACTUALIZAR")
+            local icon=$([[ "$MAIN_OPTION" == "4" ]] && echo "🔄" || echo "⬆️")
+            echo -e "$MENU_TOP"
+            echo -e "  ${icon} ${feature} - En desarrollo (Fase 2)"
+            echo -e "  ${YELLOW}ℹ️  Esta función estará disponible pronto${NC}"
+            echo -e "$MENU_BOT"
             sleep 2
             ;;
         6)
