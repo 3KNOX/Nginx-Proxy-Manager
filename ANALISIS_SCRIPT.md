@@ -1,336 +1,510 @@
-# Análisis del Script NGX_PM_PLUS.sh
+# 📚 DOCUMENTACIÓN TÉCNICA - NGX_PM_PLUS V2.0
 
-## 📋 QUÉ HACE EL SCRIPT
+## 🎯 Descripción General
 
-El script automatiza la instalación de **Nginx Proxy Manager** en un contenedor LXC de Proxmox con:
-- Base de datos MariaDB integrada
-- Docker y Docker Compose
-- Cert management automático (Let's Encrypt)
-- Opción de backups automáticos
-
----
-
-## 🔄 FLUJO DE EJECUCIÓN
-
-### 1️⃣ ETAPA: Selección de Optimización (Líneas 17-47)
-```
-Menu interactivo: ¿Qué nivel de recursos?
-1) Normal:    512MB RAM, 1 CPU, 10GB disco
-2) Media:    1024MB RAM, 2 CPU, 15GB disco  
-3) Excelente: 2048MB RAM, 2 CPU, 20GB disco + Backups
-```
-**Resultado:** Variables RAM, CPU, DISK, BACKUP
+**NGX_PM_PLUS_V2.sh** es un instalador profesional para **Nginx Proxy Manager** en Proxmox VE que automatiza:
+- Creación de contenedor LXC Debian 13
+- Instalación de Docker + Docker Compose
+- Configuración de MariaDB integrada
+- Despliegue de Nginx Proxy Manager
+- Gestión persistente de configuración
+- Backups automáticos (niveles altos)
+- Edición de URLs sin modificar código
 
 ---
 
-### 2️⃣ ETAPA: Recopilación de Datos (Líneas 50-69)
+## 🔄 Flujo de Ejecución Detallado
+
+### FASE 1: Menú Principal (Opciones 0-7)
 ```
-Solicita:
-- CTID: ID del contenedor (ej: 9000)
-- HOSTNAME: Nombre del contenedor
-- NODE: Nodo Proxmox donde crear
-- BRIDGE: Red virtual (default vmbr0)
-- DB_ROOT_PASS: Contraseña root MariaDB
-- DB_NPM_USER: Usuario BD (default "npm")
-- DB_NPM_PASS: Contraseña usuario NPM
+┌─ MENÚ PRINCIPAL ──────────────────────────────────────────┐
+[1] 🟢 INSTALAR - Nivel NORMAL
+[2] 🟡 INSTALAR - Nivel MEDIA
+[3] 🔵 INSTALAR - Nivel EXCELENTE
+[4] 🔄 REINSTALAR - Mantener datos (próx)
+[5] ⬆️  ACTUALIZAR - Dependencias (próx)
+[6] 🌐 EDITAR URLs - Cambiar links ✅
+[7] 📋 VER CONFIG - Mostrar guardada ✅
+[0] ❌ SALIR
+└───────────────────────────────────────────────────────────┘
 ```
 
----
+### FASE 2: Selección de Optimización (si instala)
+```
+┌─ CONFIGURACIÓN DE RECURSOS ─────────────────────────────┐
+[1] 🟢 NORMAL - Aplicaciones ligeras
+    └─ RAM: 512 MB  | CPU: 1 core  | Disco: 10GB
+[2] 🟡 MEDIA - Producción estándar
+    └─ RAM: 1024 MB | CPU: 2 cores | Disco: 15GB
+[3] 🔵 EXCELENTE - Producción crítica
+    └─ RAM: 2048 MB | CPU: 2 cores | Disco: 20GB + Backups ✓
+└──────────────────────────────────────────────────────────┘
+```
 
-### 3️⃣ ETAPA: Crear Contenedor LXC (Líneas 72-92)
+**Variables asignadas:**
+```bash
+RAM=512|1024|2048    DISK=10|15|20
+CPU=1|2              BACKUP=no|si
+PROFILE=emoji+texto
+```
+
+### FASE 3: Recopilación de Datos
+```
+Solicita interactivamente con validaciones:
+├─ VMID         (3-5 dígitos, sin duplicidad)
+├─ HOSTNAME     (no vacío)
+├─ NODE         (no vacío)
+├─ BRIDGE       (default: vmbr0)
+├─ DB_ROOT_PASS (contraseña oculta)
+├─ DB_NPM_USER  (default: npm)
+└─ DB_NPM_PASS  (contraseña oculta)
+```
+
+### FASE 4: Resumen & Confirmación
+```
+╔════ RESUMEN DE INSTALACIÓN ════╗
+  VMID: 9000
+  Hostname: npm-prod
+  Nodo: pve
+  Bridge: vmbr0
+  Perfil: 🔵 EXCELENTE
+  RAM: 2048MB | CPU: 2 | Disco: 20GB
+════════════════════════════════
+¿Confirmas? (s/n):
+```
+
+### FASE 5: Creación del Contenedor LXC
 ```bash
 pct create $CTID $TEMPLATE \
     --cores $CPU \
     --memory $RAM \
     --swap 512 \
     --rootfs local:$DISK \
-    --net0 name=eth0,bridge=$BRIDGE,ip=dhcp
+    --net0 name=eth0,bridge=$BRIDGE,ip=dhcp \
+    --hostname $HOSTNAME
+
+pct start $CTID
 ```
 
 **Template usado:** `debian-13-standard_13.0-1_amd64.tar.gz`
 
-**Lo que hace:**
-1. Crea contenedor LXC con ID $CTID
-2. Asigna recursos (CPU, RAM, disco)
-3. Configura red DHCP en bridge
-4. Lo inicia automáticamente
+### FASE 6: Script de Instalación Interna
+Se ejecuta dentro del contenedor via heredoc + `pct exec`:
 
----
-
-### 4️⃣ ETAPA: Instalación Backend Dentro del Contenedor (Líneas 95-180)
-
-Ejecuta `/root/install_npm.sh` DENTRO del contenedor:
-
-#### A) Actualización del sistema
+#### 6.1 - Actualizar Sistema
 ```bash
 apt update && apt upgrade -y
-apt install -y curl docker ca-certificates gnupg lsb-release
+apt install -y curl ca-certificates gnupg lsb-release sudo \
+              vim net-tools jq apt-transport-https \
+              software-properties-common procps iputils-ping
 ```
 
-#### B) Instalación de Docker + Docker Compose
+**Paquetes incluidos:**
+| Paquete | Función |
+|---------|---------|
+| `curl` | Descargar scripts e imágenes |
+| `ca-certificates` | Validar certificados SSL |
+| `gnupg` | Firmas de paquetes |
+| `lsb-release` | Info del SO |
+| `jq` | Parseo JSON |
+| `apt-transport-https` | HTTPS en APT |
+| `software-properties-common` | Gestión de repos |
+| `procps` | Utilidades ps, top |
+| `iputils-ping` | Validar conectividad |
+
+#### 6.2 - Instalar Docker
 ```bash
-# Descarga script oficial de Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
+curl -fsSL $DOCKER_URL -o get-docker.sh
+chmod +x get-docker.sh
 sh get-docker.sh
+systemctl enable docker
+systemctl start docker
 ```
 
-#### C) Configuración de Directorios
-```
-/root/nginx-proxy-manager/
-├── data/mysql/           # BD MariaDB
-├── letsencrypt/          # Certificados SSL
-└── backups/              # Backups (si nivel 3)
-```
+**Default:** `https://get.docker.com`
 
-#### D) Creación de Red Docker
+#### 6.3 - Instalar Docker Compose
 ```bash
+COMPOSE_VERSION=2.20.0 (configurable)
+curl -L https://github.com/docker/compose/releases/download/v${VERSION}/docker-compose-...
+chmod +x /usr/local/bin/docker-compose
+```
+
+**Con fallback a v2.20.0 si error**
+
+#### 6.4 - Crear Estructura de Directorios
+```bash
+NPM_ROOT=/root/nginx-proxy-manager
+mkdir -p $NPM_ROOT/{data/mysql,letsencrypt,backups}
 docker network create npm_network
 ```
 
-#### E) Docker Compose (Líneas 130-165)
-Levanta 2 servicios:
+#### 6.5 - Docker Compose Configuration
+Archivo: `/root/nginx-proxy-manager/docker-compose.yml`
 
-**Servicio 1: npm_app** (Nginx Proxy Manager)
+**Servicio: npm_app (Nginx Proxy Manager)**
 ```yaml
-image: jc21/nginx-proxy-manager:latest
-Puertos: 80, 443, 81
-Variables: Base datos MariaDB, zona horaria
+image: jc21/nginx-proxy-manager:latest  # configurable
+container_name: npm_app
+restart: unless-stopped
+ports:
+  - "80:80"      # HTTP
+  - "443:443"    # HTTPS
+  - "81:81"      # Panel de control
+environment:
+  TZ: 'America/Mexico_City'
+  DB_MYSQL_HOST: 'npm_db'
+  DB_MYSQL_PORT: 3306
+  DB_MYSQL_USER: npm
+  DB_MYSQL_PASSWORD: '${NPM_PASS_ESCAPED}'
+  DB_MYSQL_NAME: 'npm'
+volumes:
+  - ./data:/data              # Configuración
+  - ./letsencrypt:/etc/letsencrypt  # Certificados
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:81"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
 ```
 
-**Servicio 2: npm_db** (MariaDB)
+**Servicio: npm_db (MariaDB)**
 ```yaml
-image: jc21/mariadb-aria:latest
-BD: npm
-Usuario/Pass: Variables de entrada
+image: jc21/mariadb-aria:latest  # configurable
+container_name: npm_db
+restart: unless-stopped
+environment:
+  MYSQL_ROOT_PASSWORD: '${ROOT_PASS_ESCAPED}'
+  MYSQL_DATABASE: 'npm'
+  MYSQL_USER: npm
+  MYSQL_PASSWORD: '${NPM_PASS_ESCAPED}'
+  MARIADB_AUTO_UPGRADE: '1'
+volumes:
+  - ./data/mysql:/var/lib/mysql  # Persistencia
+healthcheck:
+  test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
 ```
 
-#### F) Backups Automáticos (solo si nivel 3 elegido)
+#### 6.6 - Levantar Contenedores
 ```bash
-# Crea script /root/nginx-proxy-manager/backup_npm.sh
-# Hace backup de:
-# - Base datos: mysqldump
-# - Datos: tar.gz de /data
+for i in {1..3}; do
+  if docker-compose up -d; then
+    echo 'OK'
+    break
+  else
+    echo "Reintento $i/3..."
+    sleep 5
+  fi
+done
+```
+
+**Con reintentos automáticos (3 intentos, 5s entre intentos)**
+
+#### 6.7 - Script de Backups (si BACKUP=si)
+```bash
+#!/bin/bash
+BACKUP_DIR=/root/nginx-proxy-manager/backups
+mkdir -p $BACKUP_DIR
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+
+# Dump de BD
+docker exec npm_db /usr/bin/mysqldump -u root -p'$PASS' npm \
+    > "$BACKUP_DIR/npm_db_$TIMESTAMP.sql"
+
+# Empaquetado de datos
+tar -czf "$BACKUP_DIR/npm_data_$TIMESTAMP.tar.gz" \
+    -C /root/nginx-proxy-manager data
+```
+
+**Uso:**
+```bash
+cd /root/nginx-proxy-manager
+./backup_npm.sh
+```
+
+### FASE 7: Detección de IP (Con 30 Reintentos)
+```bash
+CONTAINER_IP=""
+for i in {1..30}; do
+    CONTAINER_IP=$(pct exec $CTID -- hostname -I 2>/dev/null | awk '{print $1}')
+    if [[ ! -z "$CONTAINER_IP" && "$CONTAINER_IP" != "" ]]; then
+        echo "✓ IP detectada: $CONTAINER_IP"
+        break
+    else
+        echo -n "."
+        sleep 1
+    fi
+done
+```
+
+**Timeout:** 30 segundos (1s por intento)
+
+### FASE 8: Guardar Configuración
+```bash
+cat > /root/.npm_config << EOF
+LAST_VMID=$CTID
+LAST_HOSTNAME=$HOSTNAME
+LAST_NODE=$NODE
+LAST_BRIDGE=$BRIDGE
+LAST_PROFILE=$PROFILE
+LAST_CPU=$CPU
+LAST_RAM=$RAM
+LAST_DISK=$DISK
+LAST_BACKUP=$BACKUP
+
+DOCKER_URL=${DOCKER_URL:-$DEFAULT_DOCKER_URL}
+COMPOSE_VERSION=${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}
+NPM_IMAGE=${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}
+DB_IMAGE=${DB_IMAGE:-$DEFAULT_DB_IMAGE}
+EOF
+```
+
+### FASE 9: Mostrar Resumen Final
+```
+╔════════════════════════════════════════════════════════════╗
+║            ✅ INSTALACIÓN COMPLETADA EXITOSAMENTE ✅     ║
+╚════════════════════════════════════════════════════════════╝
+
+┌─ INFORMACIÓN DE ACCESO ───────────────────────────────────┐
+  🌐 URL: http://192.168.1.50:81
+  👤 Usuario: admin@example.com
+  🔑 Contraseña: changeme
+└────────────────────────────────────────────────────────────┘
+
+┌─ DETALLES DEL CONTENEDOR ─────────────────────────────────┐
+  📌 VMID: 9000
+  📍 Hostname: npm-prod
+  🖧 IP: 192.168.1.50
+  ⚙️  Perfil: 🔵 EXCELENTE
+└────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### 5️⃣ ETAPA: Resumen Final (Líneas 185-196)
+## 🔒 Validaciones Incluidas
 
-Muestra:
-- ✅ IP del contenedor detectada con: `pct exec $CTID -- hostname -I`
-- 🌐 URL acceso: `http://{IP}:81`
-- 👤 Usuario: `admin@example.com`
-- 🔑 Contraseña: `changeme`
-- 💾 Ubicación backups (si aplica)
-
----
-
-## ✅ REQUISITOS PARA QUE FUNCIONE
-
-### En el HOST Proxmox:
-- [ ] Proxmox VE (cualquier versión reciente)
-- [ ] Template `debian-13-standard_13.0-1_amd64.tar.gz` disponible
-- [ ] Acceso a red pública (descargar Docker/Docker Compose)
-- [ ] Espacio en storage local (mínimo 10-20GB)
-
-### Permisos necesarios:
-- [ ] Usuario con permisos de crear contenedores LXC
-- [ ] El script debe ejecutarse como **root**
+| Validación | Descripción |
+|-----------|-------------|
+| **VMID Existencia** | Verifica con `pct status $CTID` si ya corre |
+| **VMID Formato** | Valida 3-5 dígitos numéricos |
+| **Hostname No Vacío** | Loop hasta entrada válida |
+| **Node No Vacío** | Loop hasta entrada válida |
+| **Template Disponible** | Busca en `/var/lib/vz/template/cache/` |
+| **Internet** | Ping a 8.8.8.8 antes de instalar |
+| **Contraseñas Ocultas** | Uso de `read -sp` |
+| **Password Escaping** | Sed para quotes y backslashes en YAML |
+| **Menú Válido** | Regex `^[0-7]$` con loop si inválido |
+| **IP Detection** | 30 reintentos x 1s cada uno |
 
 ---
 
-## ⚠️ PROBLEMAS ENCONTRADOS Y SOLUCIONES
+## 🛡️ Seguridad
 
-### ❌ PROBLEMA 1: Template predefinido
-**Línea 72:**
+### Escapado de Contraseñas (CRITICAL)
 ```bash
-TEMPLATE="local:vztmpl/debian-13-standard_13.0-1_amd64.tar.gz"
+# Problema: Si contraseña contiene ' o \, YAML se rompe
+# Solución: Escapar antes de usarla en docker-compose.yml
+
+ROOT_PASS_ESCAPED=$(printf '%s' "$DB_ROOT_PASS" \
+    | sed "s/'/\\\\\\\\'/g" \
+    | sed 's/\\/\\\\\\\\\\\\/g')
+
+NPM_PASS_ESCAPED=$(printf '%s' "$DB_NPM_PASS" \
+    | sed "s/'/\\\\\\\\'/g" \
+    | sed 's/\\/\\\\\\\\\\\\/g')
 ```
 
-**Riesgo:** Si el template NO existe en tu Proxmox, el script falla.
+**Qué hace:**
+1. `sed "s/'/\\\\\\\\'/g"` - Convierte `'` a `\'`
+2. `sed 's/\\/\\\\\\\\\\\\/g'` - Convierte `\` a `\\`
 
-**Solución:**
-```bash
-# En Proxmox, verifica templates disponibles:
-pveam available
-# O busca localmente:
-ls /var/lib/vz/template/cache/
+### Otros Aspectos
+- ✅ Contraseñas NO se guardan en `.npm_config`
+- ✅ Contraseñas NO aparecen en logs
+- ✅ Terminal limpia después de input sensible
+- ✅ Permisos restrictivos recomendados en `/root/.npm_config`
+
+---
+
+## 📦 Gestión de URLs (Opción [6])
+
+**Función:** Cambiar URLs de Docker, Compose, imágenes SIN editar código
+
+```
+┌─ EDITAR URLs ────────────────────────────────────────────┐
+
+  Actual Docker: https://get.docker.com
+  Nueva URL Docker (Enter para mantener): 
+
+  Actual Compose: 2.20.0
+  Nueva versión (Enter para mantener): 
+
+  Imagen NPM: jc21/nginx-proxy-manager:latest
+  Nueva imagen (Enter para mantener):
+
+  Imagen BD: jc21/mariadb-aria:latest
+  Nueva imagen (Enter para mantener):
+
+└──────────────────────────────────────────────────────────┘
+```
+
+**Flujo:**
+1. Carga valores de `/root/.npm_config` si existen
+2. Solicita nuevos valores (Enter = mantener)
+3. Guarda en `.npm_config`
+4. Próxima instalación usará estos valores
+
+---
+
+## 📋 Ver Configuración (Opción [7])
+
+**Función:** Mostrar valores guardados de instalaciones previas
+
+```
+┌─ CONFIGURACIÓN GUARDADA ─────────────────────────────────┐
+
+  DATOS DEL CONTENEDOR:
+    📌 VMID: 9000
+    📍 Hostname: npm-prod
+    🖧 Nodo: pve
+    🌉 Bridge: vmbr0
+    ⚙️  Perfil: 🔵 EXCELENTE
+
+  URLs CONFIGURADAS:
+    🔗 Docker: https://get.docker.com
+    🔗 Compose: 2.20.0
+    🐳 Imagen NPM: jc21/nginx-proxy-manager:latest
+    📦 Imagen BD: jc21/mariadb-aria:latest
+
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### ❌ PROBLEMA 2: Variables de red no validadas
-**Línea 58:**
-```bash
-read -p "Nodo de Proxmox donde se creará: " NODE
+## 📂 Archivos Generados
+
+### En el HOST (/root/)
+```
+.npm_config                    # Configuración persistente
+npm_installer.log              # Log de instalación
+NGX_PM_PLUS_V2.sh             # Este script
 ```
 
-**Riesgo:** Si NODE no existe, `pct create` falla.
+### En el Contenedor (/root/nginx-proxy-manager/)
+```
+docker-compose.yml             # Definición de servicios
+data/mysql/                    # Base de datos persistente
+data/npm/                      # Configuración NPM
+letsencrypt/                   # Certificados SSL
+backups/                       # Backups automáticos (nivel 3)
+backup_npm.sh                  # Script de backup
+install_npm.sh                 # Script de instalación (heredoc)
+```
 
-**Solución:** El script debería validar:
+---
+
+## 🔄 Problemas Corregidos (v1.0 → v2.0)
+
+### Corrección 1: Validación de Variables Vacías
 ```bash
-if ! pvesh get /nodes/$NODE > /dev/null 2>&1; then
-    echo "Nodo $NODE no existe"
-    exit 1
+# ❌ Antes: Aceptaba vacíos silenciosamente
+read -p "Hostname: " HOSTNAME
+
+# ✅ Después: Loop hasta valor válido
+while true; do
+    read -p "Hostname: " HOSTNAME
+    if [[ -z "$HOSTNAME" ]]; then
+        echo "❌ No puede estar vacío"
+    else
+        break
+    fi
+done
+```
+
+### Corrección 2: Validación de VMID Duplicidad
+```bash
+# ✅ Antes de crear, verifica:
+if pct status $CTID &>/dev/null; then
+    echo "❌ VMID $CTID ya existe"
+else
+    pct create $CTID ...
 fi
 ```
 
----
-
-### ❌ PROBLEMA 3: Bridge de red puede no existir
-**Línea 59:**
+### Corrección 3: Verificación de Template
 ```bash
-read -p "Bridge de red (default vmbr0): " BRIDGE
-```
-
-**Riesgo:** Si BRIDGE incorrecto, contenedor no tendrá red.
-
-**Solución:** Validar antes de crear:
-```bash
-if ! ip link show $BRIDGE &>/dev/null; then
-    echo "Bridge $BRIDGE no existe"
-    exit 1
+# ✅ Busca template en caché:
+if ! ls /var/lib/vz/template/cache/debian-13-standard* \
+        &>/dev/null; then
+    echo "❌ Template no found. Download:"
+    echo "pveam download local debian-13-standard_13.0-1_amd64.tar.gz"
+    return 1
 fi
 ```
 
----
-
-### ❌ PROBLEMA 4: Falta detectar IP correctamente
-**Línea 188:**
+### Corrección 4: Escapado de Contraseñas
 ```bash
+# ✅ Escapar antes de usar en YAML:
+ROOT_PASS_ESCAPED=$(printf '%s' "$DB_ROOT_PASS" \
+    | sed "s/'/\\\\\\'/g" | sed 's/\\/\\\\\\/g')
+```
+
+### Corrección 5: Detección de IP Mejorada
+```bash
+# ❌ Antes: sleep 3 static (insuficiente)
+sleep 3
 CONTAINER_IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')
-```
 
-**Riesgo:** Si DHCP es lento, IP puede no estar asignada.
-
-**Solución:** Añadir espera:
-```bash
-sleep 5  # Esperar DHCP
-CONTAINER_IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')
-```
-
----
-
-### ❌ PROBLEMA 5: Contraseña exposición
-**Línea 101, 123:**
-```bash
-read -p "Contraseña ROOT para MariaDB: " DB_ROOT_PASS
-```
-
-**Riesgo:** Contraseña visible en terminal y en historial bash.
-
-**Solución:** Usar `read -s` (sin echo):
-```bash
-read -s -p "Contraseña ROOT para MariaDB: " DB_ROOT_PASS
-echo
+# ✅ Después: 30 reintentos con feedback visual
+for i in {1..30}; do
+    CONTAINER_IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')
+    if [[ ! -z "$CONTAINER_IP" ]]; then
+        break
+    fi
+    sleep 1
+done
 ```
 
 ---
 
-### ❌ PROBLEMA 6: Error si Docker Compose latest no descarga
-**Líneas 110-114:**
-```bash
-COMPOSE_LATEST=$(curl -fsSL https://api.github.com/repos/docker/compose/releases/latest)
-```
+## 🎨 Mejoras V2.0
 
-**Riesgo:** Si GitHub está down, falla silenciosamente.
-
-**Solución:** Validar curl:
-```bash
-if ! COMPOSE_LATEST=$(curl -fsSL ... 2>/dev/null); then
-    echo "Error descargando Docker Compose"
-    exit 1
-fi
-```
+| Mejora | Beneficio |
+|--------|-----------|
+| **Menú principal 8 opciones** | Más funcionalidad sin agregar items |
+| **Config persistente** | Reutilizar settings en futuras instancias |
+| **URL Editor** | Cambiar links sin editar bash |
+| **Healthchecks** | Verificar que servicios estén listos |
+| **Reintentos** | Mayor confiabilidad en levantamiento |
+| **Logging completo** | Debugging y auditoría |
+| **Password escaping** | Soporte para contraseñas complejas |
+| **IP Detection loop** | Tolera DHCP lento |
 
 ---
 
-## 🧪 CÓMO TESTEAR EN PROXMOX
+## ⚙️ Próximas Funcionalidades
 
-### PASO 1: Preparación
-```bash
-# En nodo Proxmox, como root:
-cd /root
-cp NGX_PM_PLUS.sh .
-chmod +x NGX_PM_PLUS.sh
-
-# Verifica que tienes template
-pveam available | grep debian-13
-```
-
-### PASO 2: Test en seco (sin crear contenedor)
-```bash
-# Valida sintaxis
-bash -n /root/NGX_PM_PLUS.sh
-
-# O instala shellcheck
-apt install shellcheck
-shellcheck /root/NGX_PM_PLUS.sh
-```
-
-### PASO 3: Ejecución real
-```bash
-# Ejecuta el script
-bash /root/NGX_PM_PLUS.sh
-
-# Cuando pregunte, usa:
-# Opción: 2 (Media)
-# CTID: 9000
-# Hostname: npm-server
-# Nodo: nombre_tu_nodo (ej: pve)
-# Bridge: vmbr0 (default)
-# DB Root Pass: MiContraseñaSegura123!
-# DB NPM User: npm (default)
-# DB NPM Pass: NpmPass123!
-```
-
-### PASO 4: Verificaciones después
-```bash
-# Ver estado del contenedor
-pct status 9000
-# Debe devolver: running
-
-# Ver IP asignada
-pct exec 9000 -- hostname -I
-
-# Verificar Docker adentro
-pct exec 9000 -- docker ps
-# Debe mostrar npm_app y npm_db
-
-# Acceder a web
-# Abre: http://{IP_DEL_CONTENEDOR}:81
-# User: admin@example.com
-# Pass: changeme
-```
+- [ ] **[4] REINSTALAR** - Mantener datos de instalación anterior
+- [ ] **[5] ACTUALIZAR** - Actualizar Docker, Compose, paquetes APT
+- [ ] **Interfaz gráfica** - Dashboard de monitoreo
+- [ ] **Multi-node** - Organizar múltiples NPM instancias
+- [ ] **Alertas** - Email/webhook si servicios caen
 
 ---
 
-## 📊 RESUMEN RÁPIDO
+## 👨‍💻 Créditos
 
-| Aspecto | Estado |
-|--------|--------|
-| **Sintaxis Bash** | ✅ Correcta |
-| **Lógica general** | ✅ Correcta |
-| **Validaciones** | ⚠️ Insuficientes |
-| **Manejo errores** | ⚠️ Básico |
-| **Seguridad** | ⚠️ Contraseñas expuestas |
-| **Documentación** | ✅ Buena |
-| **Reproducibilidad** | ✅ Alta |
+**Creado por:** 3KNOX  
+**Versión:** 2.0  
+**Última actualización:** Febrero 2026
 
 ---
 
-## 🚀 CONCLUSIÓN
+## 📄 Licencia
 
-**¿Funcionará en Proxmox?** 
-→ **SÍ**, si:
-- ✅ Tienes el template Debian 13
-- ✅ Tienes acceso a internet (Docker/Docker Compose)
-- ✅ Datos NODE y BRIDGE son correctos
-- ✅ Suficiente espacio disco
-
-**Recomendaciones antes de usar:**
-1. Validar disponibilidad del template
-2. Mejorar validaciones de entrada (NODE, BRIDGE)
-3. Añadir `read -s` para contraseñas
-4. Aumentar timeout para asignación DHCP
-5. Añadir verificaciones de errores en Docker install
+MIT License - Libre para usar, modificar y distribuir
