@@ -256,10 +256,12 @@ validate_template() {
     local i=1
     declare -a template_array
     while IFS= read -r template; do
-        echo "  [$i] $template"
-        template_array[$i]="$template"
-        ((i++))
-    done <<< "$templates"
+        if [[ -n "$template" ]]; then
+            echo "  [$i] $template"
+            template_array[$i]="$template"
+            ((i++))
+        fi
+    done < <(printf '%s\n' $templates)
     
     echo ""
     while true; do
