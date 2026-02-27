@@ -624,7 +624,7 @@ set -e
 
 echo 'Actualizando sistema...'
 apt update && apt upgrade -y
-apt install -y curl ca-certificates gnupg lsb-release sudo vim net-tools jq apt-transport-https software-properties-common procps iputils-ping
+apt install -y curl ca-certificates gnupg lsb-release sudo vim net-tools jq procps iputils-ping wget
 
 echo 'Instalando Docker...'
 if ! command -v docker &> /dev/null; then
