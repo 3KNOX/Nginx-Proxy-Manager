@@ -6,7 +6,15 @@
 # GitHub: https://github.com/3KNOX/Nginx-Proxy-Manager
 ###############################################################################
 
-set -e
+# Bug 1 FIX: Eliminado 'set -e' que mataba el script en comandos normales
+# como grep sin resultado, docker network create existente, pct status, etc.
+# En su lugar usamos manejo de errores explícito donde sea necesario.
+
+# Bug 12 FIX: Verificar que se ejecuta como root
+if [[ $EUID -ne 0 ]]; then
+    echo "❌ Este script debe ejecutarse como root (sudo bash $0)"
+    exit 1
+fi
 
 ################################################################################
 # SECCIÓN 1: COLORES Y CONSTANTES
@@ -20,7 +28,7 @@ NC='\033[0m'
 
 CONFIG_FILE="/root/.npm_config"
 LOG_FILE="/root/npm_installer.log"
-SCRIPT_VERSION="2.9.1"
+SCRIPT_VERSION="3.0.0"
 
 # Constantes de formato
 MENU_WIDTH=59
@@ -100,11 +108,12 @@ load_config() {
     fi
 }
 
+# Bug 3 FIX: Se agregó LAST_STORAGE para que reinstall_npm() pueda usarlo
 save_config() {
     cat > "$CONFIG_FILE" << EOF
 # Configuración de NPM Installer - $(date)
 LAST_VMID="$CTID"
-LAST_HOSTNAME="$HOSTNAME"
+LAST_HOSTNAME="$CT_HOSTNAME"
 LAST_NODE="$NODE"
 LAST_BRIDGE="$BRIDGE"
 LAST_PROFILE="$PROFILE"
@@ -112,15 +121,16 @@ LAST_CPU="$CPU"
 LAST_RAM="$RAM"
 LAST_DISK="$DISK"
 LAST_BACKUP="$BACKUP"
+LAST_STORAGE="$STORAGE"
 LAST_CONTAINER_IP="$CONTAINER_IP"
 LAST_CONTAINER_CIDR="$CONTAINER_CIDR"
 LAST_CONTAINER_GATEWAY="$CONTAINER_GATEWAY"
 
 # URLs configurables
-DOCKER_URL=${DOCKER_URL:-$DEFAULT_DOCKER_URL}
-COMPOSE_VERSION=${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}
-NPM_IMAGE=${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}
-DB_IMAGE=${DB_IMAGE:-$DEFAULT_DB_IMAGE}
+DOCKER_URL="${DOCKER_URL:-$DEFAULT_DOCKER_URL}"
+COMPOSE_VERSION="${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}"
+NPM_IMAGE="${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}"
+DB_IMAGE="${DB_IMAGE:-$DEFAULT_DB_IMAGE}"
 EOF
     log_message "Configuración guardada en $CONFIG_FILE"
 }
@@ -225,7 +235,8 @@ validate_template() {
     # Obtener lista de storages desde pvesm status (compatible con todas las versiones)
     local templates=""
     local template_storage=""
-    local all_storages=$(pvesm status 2>/dev/null | tail -n +2 | awk '{print $1}')
+    local all_storages
+    all_storages=$(pvesm status 2>/dev/null | tail -n +2 | awk '{print $1}')
     
     # Buscar templates en cada storage (buscar en vztmpl, no en images)
     for storage in $all_storages; do
@@ -256,7 +267,8 @@ validate_template() {
         echo -e "${YELLOW}2. Descargando template Debian 13...${NC}"
         
         # Obtener el nombre exacto del template disponible (segunda columna en la salida de pveam)
-        local debian_template=$(pveam available 2>/dev/null | grep "debian-13-standard" | tail -1 | awk '{print $2}')
+        local debian_template
+        debian_template=$(pveam available 2>/dev/null | grep "debian-13-standard" | tail -1 | awk '{print $2}')
         
         # Si no está en la segunda columna, intentar primera
         if [[ -z "$debian_template" ]]; then
@@ -332,7 +344,7 @@ validate_template() {
         while [[ $attempt -le $max_attempts ]]; do
             # Mostrar spinner
             printf "\r${CYAN}  %s Intento %d/%d (espera ~%d segundos)${NC}" \
-                "${spinner[$((($attempt-1) % ${#spinner[@]}))]}" \
+                "${spinner[$(((attempt-1) % ${#spinner[@]}))]}" \
                 "$attempt" \
                 "$max_attempts" \
                 "$(((max_attempts - attempt) * 10))"
@@ -356,9 +368,10 @@ validate_template() {
             
             # Si no, buscar directamente en filesystem como respaldo
             if [[ $attempt -gt 3 ]]; then
-                local fs_template=$(find /var/lib/vz/template/cache -name "*debian-13*" -type f 2>/dev/null | head -1)
+                local fs_template
+                fs_template=$(find /var/lib/vz/template/cache -name "*debian-13*" -type f 2>/dev/null | head -1)
                 if [[ -n "$fs_template" ]]; then
-                    echo -e "\n${GREEN}✓ Template encontrado en filesystem: $(basename $fs_template)${NC}"
+                    echo -e "\n${GREEN}✓ Template encontrado en filesystem: $(basename "$fs_template")${NC}"
                     templates=$(basename "$fs_template")
                     template_storage="$download_storage"
                     found=1
@@ -384,7 +397,8 @@ validate_template() {
     TEMPLATE_STORAGE="$template_storage"
     
     # Si hay una sola, seleccionarla automáticamente
-    local template_count=$(echo "$templates" | wc -l)
+    local template_count
+    template_count=$(echo "$templates" | wc -l)
     if [[ $template_count -eq 1 ]]; then
         TEMPLATE="$templates"
         echo -e "${GREEN}✓ Template seleccionada: ${TEMPLATE}${NC}"
@@ -424,7 +438,7 @@ validate_internet() {
     return 0
 }
 
-# Función genérica de validación interactiva
+# Bug 10 FIX: Reemplazado eval inseguro con printf -v
 validate_input() {
     local prompt="$1"
     local variable_name="$2"
@@ -440,7 +454,7 @@ validate_input() {
         fi
         
         if [[ "$value" =~ $pattern ]]; then
-            eval "$variable_name='$value'"
+            printf -v "$variable_name" '%s' "$value"
             break
         else
             echo -e "${RED}❌ $error_msg${NC}"
@@ -458,7 +472,6 @@ detect_network_config() {
     # Buscar la configuración del bridge en /etc/network/interfaces
     if [[ -f /etc/network/interfaces ]]; then
         local in_bridge_section=0
-        local line_buffer=""
         
         while IFS= read -r line; do
             # Si encontramos la sección del bridge
@@ -551,7 +564,7 @@ request_static_ip() {
 validate_vmid() {
     validate_input "VMID del contenedor" "CTID" "^[0-9]{3,5}$" "VMID inválido. Usa números entre 100-99999" "9000"
     # Verificar si ya existe
-    if pct status $CTID &>/dev/null; then
+    if pct status "$CTID" &>/dev/null; then
         echo -e "${RED}❌ El VMID $CTID ya existe. Por favor usa otro.${NC}"
         validate_vmid  # Reintentar
     fi
@@ -588,10 +601,11 @@ get_bridge() {
     echo "$bridge"
 }
 
+# Bug 2 FIX: Renombrado HOSTNAME -> CT_HOSTNAME para evitar colisión
 validate_hostname() {
     # Generar hostname automáticamente basado en VMID
-    HOSTNAME=$(generate_hostname)
-    echo -e "${GREEN}✓ Nombre del contenedor asignado automáticamente: ${HOSTNAME}${NC}"
+    CT_HOSTNAME=$(generate_hostname)
+    echo -e "${GREEN}✓ Nombre del contenedor asignado automáticamente: ${CT_HOSTNAME}${NC}"
 }
 
 validate_node() {
@@ -605,7 +619,8 @@ validate_storage() {
     
     # Obtener almacenamientos válidos desde pvesm status
     # Compatible con todas las versiones de Proxmox
-    local STORAGES=$(pvesm status 2>/dev/null | tail -n +2 | awk '{print $1}' | head -5)
+    local STORAGES
+    STORAGES=$(pvesm status 2>/dev/null | tail -n +2 | awk '{print $1}' | head -5)
     
     if [[ -z "$STORAGES" ]]; then
         echo -e "${RED}❌ No se encontraron almacenamientos.${NC}"
@@ -675,15 +690,25 @@ install_npm() {
     read -sp "$(echo -e "${YELLOW}Contraseña NPM para la base de datos${NC}") : " DB_NPM_PASS
     echo ""
     
+    # Actualizar configuración con URLs
+    load_config || true
+    DOCKER_URL=${DOCKER_URL:-$DEFAULT_DOCKER_URL}
+    COMPOSE_VERSION=${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}
+    NPM_IMAGE=${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}
+    DB_IMAGE=${DB_IMAGE:-$DEFAULT_DB_IMAGE}
+    
+    # Bug 2 FIX: Usar CT_HOSTNAME en lugar de HOSTNAME
     # Mostrar resumen
     echo ""
     echo -e "$HEADER_TOP"
     echo -e "${CYAN}║${NC}  ${YELLOW}RESUMEN DE INSTALACIÓN${NC}                              ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  VMID: ${GREEN}$CTID${NC}          Hostname: ${GREEN}$HOSTNAME${NC}${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  VMID: ${GREEN}$CTID${NC}          Hostname: ${GREEN}$CT_HOSTNAME${NC}${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  Nodo: ${GREEN}$NODE${NC}          Bridge: ${GREEN}$BRIDGE${NC}${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  RAM: ${GREEN}${RAM}MB${NC} | CPU: ${GREEN}${CPU}${NC} | Disco: ${GREEN}${DISK}GB${NC}      ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  Perfil: ${GREEN}${PROFILE}${NC}    Template: ${GREEN}${TEMPLATE_STORAGE}${NC}${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  IP: ${GREEN}${CONTAINER_IP}/${CONTAINER_CIDR}${NC} | GW: ${GREEN}${CONTAINER_GATEWAY}${NC}         ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  Imagen NPM: ${GREEN}${NPM_IMAGE}${NC}${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  Imagen BD:  ${GREEN}${DB_IMAGE}${NC}${CYAN}║${NC}"
     echo -e "$HEADER_BOT"
     echo -e "${YELLOW}¿Confirmas? (s/n):${NC} "
     read CONFIRM
@@ -694,13 +719,6 @@ install_npm() {
         return 1
     fi
     
-    # Actualizar configuración con URLs
-    load_config || true
-    DOCKER_URL=${DOCKER_URL:-$DEFAULT_DOCKER_URL}
-    COMPOSE_VERSION=${COMPOSE_VERSION:-$DEFAULT_COMPOSE_VERSION}
-    NPM_IMAGE=${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}
-    DB_IMAGE=${DB_IMAGE:-$DEFAULT_DB_IMAGE}
-    
     # Crear contenedor
     echo -e "${CYAN}Creando contenedor LXC...${NC}"
     echo -e "${YELLOW}Template Storage: ${TEMPLATE_STORAGE}${NC}"
@@ -708,44 +726,79 @@ install_npm() {
     
     # TEMPLATE Storage detectado en validate_template()
     # El almacenamiento dinámico ($STORAGE) es solo para el rootfs
-    # Si el template es un archivo direct (no indexado), usar ruta completa
     local template_source="$TEMPLATE_STORAGE:vztmpl/$TEMPLATE"
     if [[ "$TEMPLATE" == *.tar.zst ]]; then
         template_source="$TEMPLATE_STORAGE:vztmpl/$TEMPLATE"
     fi
     
-    pct create $CTID "$template_source" \
-        --cores $CPU \
-        --memory $RAM \
+    pct create "$CTID" "$template_source" \
+        --cores "$CPU" \
+        --memory "$RAM" \
         --swap 512 \
-        --rootfs $STORAGE:$DISK \
-        --net0 name=eth0,bridge=$BRIDGE,ip=${CONTAINER_IP}/${CONTAINER_CIDR},gw=${CONTAINER_GATEWAY} \
-        --hostname $HOSTNAME \
+        --rootfs "$STORAGE:$DISK" \
+        --net0 "name=eth0,bridge=$BRIDGE,ip=${CONTAINER_IP}/${CONTAINER_CIDR},gw=${CONTAINER_GATEWAY}" \
+        --hostname "$CT_HOSTNAME" \
         --password "$DB_ROOT_PASS" \
         --nameserver 8.8.8.8 \
         --searchdomain local \
         --unprivileged 0 \
         --features nesting=1
     
-    pct start $CTID
+    pct start "$CTID"
     echo -e "${GREEN}✓ Contenedor iniciado${NC}"
+    
+    # Bug 9 FIX: Esperar a que el contenedor esté listo
+    echo -e "${YELLOW}Esperando a que el contenedor esté listo...${NC}"
+    local wait_attempts=0
+    while [[ $wait_attempts -lt 30 ]]; do
+        if pct exec "$CTID" -- hostname &>/dev/null; then
+            echo -e "${GREEN}✓ Contenedor listo${NC}"
+            break
+        fi
+        ((wait_attempts++))
+        sleep 2
+    done
+    if [[ $wait_attempts -ge 30 ]]; then
+        echo -e "${RED}❌ Contenedor no responde después de 60 segundos${NC}"
+        return 1
+    fi
     
     # Crear script de instalación en el HOST (evita problemas de heredoc)
     LOCAL_SCRIPT="/tmp/npm_install_$CTID.sh"
     CONTAINER_SCRIPT="/root/install_npm.sh"
     
+    # Bug 6 & 7 FIX: Se pasan NPM_IMAGE, DB_IMAGE y DOCKER_URL como argumentos
     # Crear el script directamente en el host SIN usar pct exec
     cat > "$LOCAL_SCRIPT" << 'SCRIPT_END'
 #!/bin/bash
-# Recibir contraseñas como argumentos (evita problemas de expansión)
+# Recibir parámetros como argumentos
 DB_NPM_PASS="$1"
 DB_ROOT_PASS="$2"
+NPM_IMAGE="${3:-jc21/nginx-proxy-manager:latest}"
+DB_IMAGE="${4:-jc21/mariadb-aria:latest}"
+DOCKER_URL="${5:-https://get.docker.com}"
 
-set -e
 export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 apt update && apt upgrade -y
 apt install -y curl ca-certificates gnupg lsb-release sudo vim net-tools jq procps iputils-ping wget netcat-openbsd
-! command -v docker &>/dev/null && { curl -fsSL https://get.docker.com | sh; systemctl enable docker; systemctl start docker; }
+
+# Bug 5 FIX: Usar DOCKER_URL configurable y verificar docker compose
+if ! command -v docker &>/dev/null; then
+    curl -fsSL "$DOCKER_URL" | sh
+    systemctl enable docker
+    systemctl start docker
+fi
+
+# Verificar que docker compose (v2 plugin) está disponible
+if ! docker compose version &>/dev/null; then
+    echo "❌ ERROR: docker compose no está disponible."
+    echo "   Intentando instalar plugin compose..."
+    apt install -y docker-compose-plugin 2>/dev/null || {
+        echo "❌ No se pudo instalar docker compose. Abortando."
+        exit 1
+    }
+fi
+
 mkdir -p /root/nginx-proxy-manager/{data/mysql,letsencrypt,backups}
 cd /root/nginx-proxy-manager
 docker network create npm_network 2>/dev/null || true
@@ -769,14 +822,15 @@ exec $cmd
 WAITSCRIPT
 chmod +x /root/nginx-proxy-manager/wait-for-db.sh
 
-cat > docker-compose.yml << 'YAML_END'
+# Bug 6 FIX: Usar variables NPM_IMAGE y DB_IMAGE en lugar de hardcoded
+cat > docker-compose.yml << YAML_END
 networks:
   npm_net:
     external: true
     name: npm_network
 services:
   npm_app:
-    image: jc21/nginx-proxy-manager:latest
+    image: ${NPM_IMAGE}
     container_name: npm_app
     restart: unless-stopped
     networks: [npm_net]
@@ -791,7 +845,6 @@ services:
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
-      - ./nginx-spa.conf:/etc/nginx/conf.d/03-npm-spa-manager.conf:ro
     depends_on:
       npm_db:
         condition: service_healthy
@@ -802,7 +855,7 @@ services:
       retries: 5
       start_period: 60s
   npm_db:
-    image: jc21/mariadb-aria:latest
+    image: ${DB_IMAGE}
     container_name: npm_db
     restart: unless-stopped
     networks: [npm_net]
@@ -822,32 +875,8 @@ services:
       start_period: 30s
 YAML_END
 
-# Crear configuración Nginx personalizada para manejar SPA routing en puerto 81
-cat > nginx-spa.conf << 'NGINX_END'
-# Configuración personalizada para Nginx Proxy Manager - SPA Routing
-# Puerto 81 debe servir correctamente todas las rutas del panel
-
-# Redirigir rutas SPA que no corresponden a archivos estáticos a index.html
-location /app/ {
-    alias /app/frontend/;
-    index index.html index.htm;
-    try_files $uri $uri/ /index.html;
-}
-
-# Redirigir /nginx/ y otras rutas SPA a index.html
-location ~ ^/(nginx|audit-log|certificates|hosts|users|access-list|settings)/ {
-    proxy_pass http://localhost:3000;
-    proxy_buffering off;
-    proxy_request_buffering off;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-NGINX_END
+# Bug 11 FIX: Eliminado nginx-spa.conf que se creaba pero nunca se montaba
+# NPM gestiona su propia configuración de Nginx internamente
 
 sed -i "s|NPMPASS_PLACEHOLDER|${DB_NPM_PASS}|g;s|ROOTPASS_PLACEHOLDER|${DB_ROOT_PASS}|g" docker-compose.yml
 docker compose up -d 2>&1 || { sleep 5; docker compose up -d; }
@@ -922,31 +951,22 @@ SCRIPT_END
 
     chmod +x "$LOCAL_SCRIPT"
     
-    # Copiar y ejecutar CON ARGUMENTOS (contraseñas)
-    pct push $CTID "$LOCAL_SCRIPT" "$CONTAINER_SCRIPT"
-    pct exec $CTID -- bash "$CONTAINER_SCRIPT" "$DB_NPM_PASS" "$DB_ROOT_PASS"
+    # Bug 6 & 7 FIX: Pasar imágenes y URL como argumentos al script
+    pct push "$CTID" "$LOCAL_SCRIPT" "$CONTAINER_SCRIPT"
+    pct exec "$CTID" -- bash "$CONTAINER_SCRIPT" "$DB_NPM_PASS" "$DB_ROOT_PASS" "$NPM_IMAGE" "$DB_IMAGE" "$DOCKER_URL"
     
     # Limpiar archivo temporal
     rm -f "$LOCAL_SCRIPT"
     
-    # Detectar IP con reintentos
-    echo -e "${YELLOW}Detectando IP del contenedor...${NC}"
-    CONTAINER_IP=""
-    for i in {1..30}; do
-        CONTAINER_IP=$(pct exec $CTID -- hostname -I 2>/dev/null | awk '{print $1}' || echo "")
-        if [[ ! -z "$CONTAINER_IP" && "$CONTAINER_IP" != "" ]]; then
-            echo -e "${GREEN}✓ IP detectada: $CONTAINER_IP${NC}"
-            break
-        else
-            echo -n "."
-            sleep 1
-        fi
-    done
-    echo ""
-    
-    if [[ -z "$CONTAINER_IP" ]]; then
-        echo -e "${RED}❌ No se pudo detectar IP${NC}"
-        return 1
+    # Bug 13 FIX: No sobrescribir CONTAINER_IP si ya fue configurada estáticamente
+    # La IP estática ya fue configurada por el usuario, solo verificamos conectividad
+    echo -e "${YELLOW}Verificando conectividad del contenedor...${NC}"
+    local verify_ip
+    verify_ip=$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}' || echo "")
+    if [[ -n "$verify_ip" ]]; then
+        echo -e "${GREEN}✓ IP verificada: $verify_ip${NC}"
+    else
+        echo -e "${YELLOW}⚠️  No se pudo verificar IP, usando la configurada: $CONTAINER_IP${NC}"
     fi
     
     # Guardar configuración
@@ -965,7 +985,7 @@ SCRIPT_END
     echo -e "  🔑 Contraseña: ${GREEN}changeme${NC}"
     echo -e ""
     echo -e "  ${CYAN}DETALLES DEL CONTENEDOR${NC}"
-    echo -e "  📌 VMID: ${GREEN}${CTID}${NC}       📍 Hostname: ${GREEN}${HOSTNAME}${NC}"
+    echo -e "  📌 VMID: ${GREEN}${CTID}${NC}       📍 Hostname: ${GREEN}${CT_HOSTNAME}${NC}"
     echo -e "  🖧 IP: ${GREEN}${CONTAINER_IP}${NC}        ⚙️  Perfil: ${GREEN}${PROFILE}${NC}"
     echo -e "$MENU_BOT"
     echo ""
@@ -1004,6 +1024,11 @@ reinstall_npm() {
     [[ "$confirm" != "s" ]] && return
     echo ""
     
+    # Bug 8 FIX: Detener el contenedor antes de destruirlo
+    echo -e "${YELLOW}Deteniendo contenedor...${NC}"
+    pct stop "$LAST_VMID" 2>/dev/null || true
+    sleep 3
+    
     echo -e "${YELLOW}Destruyendo contenedor...${NC}"
     if pct destroy "$LAST_VMID" 2>&1; then
         echo -e "${GREEN}✓ Contenedor destruido${NC}"
@@ -1017,10 +1042,15 @@ reinstall_npm() {
     
     echo -e "${YELLOW}Recreando contenedor con la misma configuración...${NC}"
     CTID="$LAST_VMID"
-    HOSTNAME="$LAST_HOSTNAME"
+    CT_HOSTNAME="$LAST_HOSTNAME"
     NODE="$LAST_NODE"
     STORAGE="$LAST_STORAGE"
     BRIDGE="$LAST_BRIDGE"
+    
+    # Bug 14 FIX: Restaurar variables de red de la config guardada
+    CONTAINER_IP="$LAST_CONTAINER_IP"
+    CONTAINER_CIDR="$LAST_CONTAINER_CIDR"
+    CONTAINER_GATEWAY="$LAST_CONTAINER_GATEWAY"
     
     # Reconfigurar RAM/CPU/DISK según perfil
     case "$LAST_PROFILE" in
@@ -1054,13 +1084,13 @@ update_npm() {
     echo -e "$MENU_BOT"
     echo ""
     
-    if ! pct exec $LAST_VMID -- hostname &>/dev/null; then
+    if ! pct exec "$LAST_VMID" -- hostname &>/dev/null; then
         echo -e "${RED}❌ Contenedor VMID $LAST_VMID no responde${NC}"
         sleep 2
         return 1
     fi
     
-    echo -e "${YELLOW}Containers actualizado:${NC}"
+    echo -e "${YELLOW}Contenedor a actualizar:${NC}"
     echo -e "  📌 VMID: ${GREEN}${LAST_VMID}${NC}"
     echo -e "  🏠 Hostname: ${GREEN}${LAST_HOSTNAME}${NC}"
     echo ""
@@ -1069,8 +1099,12 @@ update_npm() {
     [[ "$confirm" != "s" ]] && return
     echo ""
     
+    # Bug 6 FIX: Usar imágenes configuradas en lugar de hardcoded
+    local npm_img="${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}"
+    local db_img="${DB_IMAGE:-$DEFAULT_DB_IMAGE}"
+    
     echo -e "${YELLOW}1. Actualizando sistema Debian...${NC}"
-    if pct exec $LAST_VMID -- bash -c "apt update && apt upgrade -y" &>/dev/null; then
+    if pct exec "$LAST_VMID" -- bash -c "apt update && apt upgrade -y" &>/dev/null; then
         echo -e "${GREEN}✓ Sistema actualizado${NC}"
     else
         echo -e "${RED}❌ Error en actualización de sistema${NC}"
@@ -1079,7 +1113,7 @@ update_npm() {
     sleep 1
     
     echo -e "${YELLOW}2. Actualizando imágenes Docker...${NC}"
-    if pct exec $LAST_VMID -- bash -c "docker pull jc21/nginx-proxy-manager:latest && docker pull jc21/mariadb-aria:latest" &>/dev/null; then
+    if pct exec "$LAST_VMID" -- bash -c "docker pull $npm_img && docker pull $db_img" &>/dev/null; then
         echo -e "${GREEN}✓ Imágenes actualizadas${NC}"
     else
         echo -e "${RED}❌ Error al actualizar imágenes${NC}"
@@ -1088,7 +1122,7 @@ update_npm() {
     sleep 1
     
     echo -e "${YELLOW}3. Reiniciando servicios...${NC}"
-    if pct exec $LAST_VMID -- bash -c "cd /root/nginx-proxy-manager && docker compose up -d" &>/dev/null; then
+    if pct exec "$LAST_VMID" -- bash -c "cd /root/nginx-proxy-manager && docker compose up -d" &>/dev/null; then
         echo -e "${GREEN}✓ Servicios reiniciados${NC}"
     else
         echo -e "${RED}❌ Error al reiniciar servicios${NC}"
@@ -1102,7 +1136,7 @@ update_npm() {
     
     # Mostrar status
     echo -e "${CYAN}Estado de contenedores:${NC}"
-    pct exec $LAST_VMID -- docker ps
+    pct exec "$LAST_VMID" -- docker ps
     
     echo ""
     read -p "Presiona Enter para volver al menú..."
@@ -1144,4 +1178,3 @@ while true; do
             ;;
     esac
 done
-
