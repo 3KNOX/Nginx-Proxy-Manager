@@ -1,6 +1,6 @@
 # 🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER
 
-![Version](https://img.shields.io/badge/version-2.8.2-green.svg)
+![Version](https://img.shields.io/badge/version-2.8.3-green.svg)
 ![Proxmox](https://img.shields.io/badge/proxmox-7.x%2F8.x%2F9.x-orange.svg)
 ![Creator](https://img.shields.io/badge/creator-3KNOX-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -13,6 +13,10 @@
 
 - ✅ **Menú interactivo** con 6 opciones: 3 niveles de instalación + reinstalar + actualizar
 - ✅ **IP estática configurable** - Solicita IP, máscara CIDR y gateway durante instalación (sin DHCP)
+- ✅ **Autodeteccin de red** - Lee `/etc/network/interfaces` para obtener mascara y gateway automáticamente
+- ✅ **Autologin automático** - Login instantáneo como root (NO solicita credenciales)
+- ✅ **MOTD dinámico limpio** - Muestra información sin caracteres especiales problemáticos
+- ✅ **Script de bienvenida** - Muestra estado de servicios al conectarcontenedor
 - ✅ **Creación automática** de contenedor LXC Debian 13 optimizado
 - ✅ **Autodetección de almacenamiento** válido para LXC (búsqueda en pvesm:vztmpl)
 - ✅ **Docker + Docker Compose plugin** (no legacy) instalados y configurados
@@ -23,11 +27,11 @@
 - ✅ **Credenciales seguras** - Paso de argumentos vs heredoc para evitar expansión incompleta
 - ✅ **LXC Nesting habilitado** (--features nesting=1) para Docker en LXC
 - ✅ **Gestión de configuración persistente** (.npm_config) con detección de corrupción
-- ✅ **MOTD dinámico** - Información de contenedor en cada login
 - ✅ **Reinstalar contenedor** - Opción [4] para destruir y recrear manteniendo configuración
 - ✅ **Actualizar sistema** - Opción [5] para actualizar Debian, Docker e imágenes
-- ✅ **Backups automáticos** (con nivel Excelente)
-- ✅ **Interfaz colorida y accesible** - Emojis, spinners, validaciones en tiempo real
+- ✅ **Backups automát
+icos** (con nivel Excelente)
+- ✅ **Interfaz colorida y accesible** - Spinners, validaciones en tiempo real
 
 ---
 
@@ -65,13 +69,13 @@ curl -fsSL https://raw.githubusercontent.com/3KNOX/Nginx-Proxy-Manager/refs/head
 
 ---
 
-## 📊 Menú Principal (V2.8.2)
+## 📊 Menú Principal (V2.8.3)
 
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
 ║     🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER 🚀         ║
-║                        v2.8.2                              ║
+║                        v2.8.3                              ║
 ║              Created by: 3KNOX                             ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
@@ -138,19 +142,46 @@ El script:
 2. Instala Docker y Docker Compose
 3. Despliega Nginx Proxy Manager
 4. Configura MariaDB
-5. Detecta la IP automáticamente
+5. **Habilita autologin automático** ⭐ NUEVO (v2.8.3)
 6. Guarda la configuración
 
 ---
 
-## 🌐 Acceso Inicial
+## 🌐 Acceso al Contenedor (v2.8.3)
+
+### Cambios Recientes:
+- ✅ **Autologin automático**: Entras como root **sin necesidad de credenciales**
+- ✅ **MOTD mejorado**: Muestra información limpia sin caracteres problemáticos
+- ✅ **Script de bienvenida**: Visualiza estado de servicios Docker al conectar
+
+### Pantalla de Bienvenida:
+```
+=========================================
+Nginx Proxy Manager - LXC Container
+=========================================
+
+System: Debian GNU/Linux 13 (bookworm)
+Hostname: Nginx-PMX
+IP Address: 192.168.1.100
+
+Created by: 3KNOX
+https://github.com/3KNOX
+
+CONTAINER ID   IMAGE                        COMMAND   CREATED STATUS  PORTS
+abc123         jc21/nginx-proxy-manager ... ...
+def456         jc21/mariadb-aria ...        ...
+```
+
+---
+
+## 🌐 Acceso a Nginx Proxy Manager
 
 Una vez completada la instalación:
 
 ```
-🌐 URL: http://<IP_CONTENEDOR>:81
-👤 Usuario: admin@example.com
-🔑 Contraseña: changeme
+URL: http://<IP_CONTENEDOR>:81
+Usuario: admin@example.com
+Contraseña: changeme
 ```
 
 ⚠️ **IMPORTANTE**: Cambia la contraseña inmediatamente después del primer acceso.
@@ -184,7 +215,7 @@ Una vez completada la instalación:
 
 ---
 
-## 💾 Gestión de Configuración (V2.8.2)
+## 💾 Gestión de Configuración (V2.8.3)
 
 El script guarda automáticamente tu configuración en:
 

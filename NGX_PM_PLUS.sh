@@ -20,7 +20,7 @@ NC='\033[0m'
 
 CONFIG_FILE="/root/.npm_config"
 LOG_FILE="/root/npm_installer.log"
-SCRIPT_VERSION="2.8.2"
+SCRIPT_VERSION="2.8.3"
 
 # Constantes de formato
 MENU_WIDTH=59
@@ -844,23 +844,51 @@ for i in {1..60}; do
   echo "Intento $i/60..."
   sleep 2
 done
-mkdir -p /etc/update-motd.d
-cat > /etc/update-motd.d/00-header << 'MOTD_END'
+
+# Configurar autologin automático para root
+mkdir -p /etc/systemd/system/agetty@tty1.service.d
+cat > /etc/systemd/system/agetty@tty1.service.d/override.conf << 'AUTOLOGIN_END'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
+AUTOLOGIN_END
+
+# Crear script de bienvenida simple (sin emojis)
+cat > /etc/profile.d/00-npm-welcome.sh << 'WELCOME_END'
 #!/bin/bash
-echo -e "\033[1;36m$(lsb_release -ds) $(hostname) tty1\033[0m"
-echo "$(hostname) login: root (automatic login)"
-echo ""
-echo "The programs included with the Debian GNU/Linux system are free software;"
-echo ""
-echo -e "\033[1;32mNginx Proxy Manager LXC Container\033[0m"
-echo "    🌐   Provided by: 3KNOX | GitHub: https://github.com/3KNOX"
-echo "    🖥️   OS: Debian GNU/Linux - Version: $(lsb_release -rs)"
-echo "    🏠   Hostname: $(hostname)"
-echo "    💡   IP Address: $(hostname -I | awk '{print $1}')"
-echo ""
+# Script de bienvenida de Nginx Proxy Manager
+if [ "$TERM" != "dumb" ]; then
+  clear
+  echo "========================================="
+  echo "Nginx Proxy Manager - LXC Container"
+  echo "========================================="
+  echo ""
+  echo "System: $(lsb_release -ds)"
+  echo "Hostname: $(hostname)"
+  echo "IP Address: $(hostname -I 2>/dev/null | awk '{print $1}')"
+  echo ""
+  echo "Created by: 3KNOX"
+  echo "GitHub: https://github.com/3KNOX"
+  echo ""
+  docker ps 2>/dev/null && echo "" || true
+fi
+WELCOME_END
+chmod 755 /etc/profile.d/00-npm-welcome.sh
+
+# Crear MOTD simple sin caracteres especiales
+cat > /etc/motd << 'MOTD_END'
+==========================================
+Nginx Proxy Manager - LXC Container
+==========================================
+
+Web Interface: http://localhost:81
+User: admin@example.com
+Password: changeme
+
+Provided by: 3KNOX
+https://github.com/3KNOX
+==========================================
 MOTD_END
-chmod 755 /etc/update-motd.d/00-header
-rm -f /etc/motd && run-parts /etc/update-motd.d > /etc/motd 2>/dev/null || true
 SCRIPT_END
 
     chmod +x "$LOCAL_SCRIPT"
