@@ -20,7 +20,7 @@ NC='\033[0m'
 
 CONFIG_FILE="/root/.npm_config"
 LOG_FILE="/root/npm_installer.log"
-SCRIPT_VERSION="2.0"
+SCRIPT_VERSION="2.8.1"
 
 # Constantes de formato
 MENU_WIDTH=59
@@ -112,6 +112,9 @@ LAST_CPU="$CPU"
 LAST_RAM="$RAM"
 LAST_DISK="$DISK"
 LAST_BACKUP="$BACKUP"
+LAST_CONTAINER_IP="$CONTAINER_IP"
+LAST_CONTAINER_CIDR="$CONTAINER_CIDR"
+LAST_CONTAINER_GATEWAY="$CONTAINER_GATEWAY"
 
 # URLs configurables
 DOCKER_URL=${DOCKER_URL:-$DEFAULT_DOCKER_URL}
@@ -445,6 +448,26 @@ validate_input() {
     done
 }
 
+request_static_ip() {
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${YELLOW}CONFIGURACIÓN DE RED - IP ESTÁTICA${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${YELLOW}Nginx Proxy Manager requiere una IP fija para funcionar correctamente${NC}"
+    echo ""
+    
+    validate_input "IP del contenedor" "CONTAINER_IP" "^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$" "IP inválida. Usa formato 192.168.1.100" "192.168.1.100"
+    
+    validate_input "Máscara de red (CIDR)" "CONTAINER_CIDR" "^(8|16|24|25|26|27|28|29|30|31|32)$" "CIDR inválido. Usa valores entre 8-32 (típicamente 24 para /24)" "24"
+    
+    validate_input "Gateway (puerta de enlace)" "CONTAINER_GATEWAY" "^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$" "Gateway inválido. Usa formato 192.168.1.1" "192.168.1.1"
+    
+    echo -e "${GREEN}✓ IP Estática configurada: ${CONTAINER_IP}/${CONTAINER_CIDR}${NC}"
+    echo -e "${GREEN}✓ Gateway: ${CONTAINER_GATEWAY}${NC}"
+    echo ""
+}
+
 validate_vmid() {
     validate_input "VMID del contenedor" "CTID" "^[0-9]{3,5}$" "VMID inválido. Usa números entre 100-99999" "9000"
     # Verificar si ya existe
@@ -559,6 +582,9 @@ install_npm() {
     BRIDGE=$(get_bridge)
     echo -e "${GREEN}✓ Bridge de red asignado automáticamente: ${BRIDGE}${NC}"
     
+    # Solicitar configuración de IP estática
+    request_static_ip
+    
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo -e "${YELLOW}CREDENCIALES DE SEGURIDAD${NC}"
@@ -577,6 +603,7 @@ install_npm() {
     echo -e "${CYAN}║${NC}  Nodo: ${GREEN}$NODE${NC}          Bridge: ${GREEN}$BRIDGE${NC}${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  RAM: ${GREEN}${RAM}MB${NC} | CPU: ${GREEN}${CPU}${NC} | Disco: ${GREEN}${DISK}GB${NC}      ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  Perfil: ${GREEN}${PROFILE}${NC}    Template: ${GREEN}${TEMPLATE_STORAGE}${NC}${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  IP: ${GREEN}${CONTAINER_IP}/${CONTAINER_CIDR}${NC} | GW: ${GREEN}${CONTAINER_GATEWAY}${NC}         ${CYAN}║${NC}"
     echo -e "$HEADER_BOT"
     echo -e "${YELLOW}¿Confirmas? (s/n):${NC} "
     read CONFIRM
@@ -612,7 +639,7 @@ install_npm() {
         --memory $RAM \
         --swap 512 \
         --rootfs $STORAGE:$DISK \
-        --net0 name=eth0,bridge=$BRIDGE,ip=dhcp \
+        --net0 name=eth0,bridge=$BRIDGE,ip=${CONTAINER_IP}/${CONTAINER_CIDR},gw=${CONTAINER_GATEWAY} \
         --hostname $HOSTNAME \
         --password "$DB_ROOT_PASS" \
         --nameserver 8.8.8.8 \
