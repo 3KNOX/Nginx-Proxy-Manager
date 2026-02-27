@@ -697,7 +697,6 @@ echo ""
 MOTD_END
 chmod 755 /etc/update-motd.d/00-header
 rm -f /etc/motd && run-parts /etc/update-motd.d > /etc/motd 2>/dev/null || true
-grep -q "cat /etc/motd" /root/.bashrc || echo "[ -r /etc/motd ] && cat /etc/motd" >> /root/.bashrc
 SCRIPT_END
 
     chmod +x "$LOCAL_SCRIPT"
