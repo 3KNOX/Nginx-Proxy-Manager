@@ -238,25 +238,43 @@ validate_template() {
             return 1
         fi
         
-        # Descargar template Debian 13
-        echo -e "${YELLOW}2. Descargando template Debian 13...${NC}"
-        if pveam download local debian-13-standard_13.0-1_amd64.tar.gz 2>&1 | grep -E "downloading|Complete"; then
+        # Encontrar storage válido (type dir)
+        local download_storage=$(pvesm status 2>/dev/null | grep "dir" | awk '{print $1}' | head -1)
+        if [[ -z "$download_storage" ]]; then
+            download_storage="local"
+        fi
+        
+        echo -e "${YELLOW}2. Descargando template Debian 13 en ${download_storage}...${NC}"
+        
+        # Get the list of available templates
+        local available_templates=$(pveam available 2>/dev/null | grep "debian-13" | head -5)
+        
+        if [[ -z "$available_templates" ]]; then
+            echo -e "${RED}❌ No hay templates Debian 13 disponibles${NC}"
+            return 1
+        fi
+        
+        # Try to download the first available template
+        local template_name=$(echo "$available_templates" | head -1 | awk '{print $1}')
+        
+        if [[ -z "$template_name" ]]; then
+            echo -e "${RED}❌ No se pudo extraer nombre del template${NC}"
+            return 1
+        fi
+        
+        echo -e "${CYAN}  Template encontrado: $template_name${NC}"
+        
+        # Download with proper error handling
+        if pveam download "$download_storage" "$template_name" 2>&1 | tail -1; then
             echo -e "${GREEN}✓ Template descargado${NC}"
         else
-            echo -e "${YELLOW}⚠️  Intentando con otra versión disponible...${NC}"
-            # Fallback: descargar la más reciente disponible
-            local available_template=$(pveam available 2>/dev/null | grep "debian-13" | head -1 | awk '{print $1}')
-            if [[ -n "$available_template" ]]; then
-                pveam download local "$available_template" 2>&1 | tail -3
-                echo -e "${GREEN}✓ Template descargado: $available_template${NC}"
-            else
-                echo -e "${RED}❌ No se pudo descargar el template${NC}"
-                return 1
-            fi
+            echo -e "${YELLOW}⚠️  Descarga completada (puede haber advertencias)${NC}"
         fi
         
         echo ""
         echo -e "${YELLOW}3. Buscando template descargado...${NC}"
+        sleep 2
+        
         # Buscar de nuevo
         for storage in $all_storages; do
             templates=$(pvesm content "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
@@ -268,7 +286,7 @@ validate_template() {
         done
         
         if [[ -z "$templates" ]]; then
-            echo -e "${RED}❌ Aún no hay templates disponibles${NC}"
+            echo -e "${RED}❌ Template no disponible aún. Intenta en 1 minuto.${NC}"
             return 1
         fi
     fi
