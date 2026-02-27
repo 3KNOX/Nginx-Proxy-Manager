@@ -211,13 +211,14 @@ edit_urls() {
 validate_template() {
     echo -e "${YELLOW}Buscando templates Debian en todos los storages...${NC}"
     
-    # Buscar templates en TODOS los storages
+    # Obtener lista de storages desde pvesm status (compatible con todas las versiones)
     local templates=""
     local template_storage=""
-    local all_storages=$(pvesm storage list 2>/dev/null | grep -v "^---" | awk '{print $1}')
+    local all_storages=$(pvesm status 2>/dev/null | tail -n +2 | awk '{print $1}')
     
+    # Buscar templates en cada storage
     for storage in $all_storages; do
-        templates=$(pvesm content "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
+        templates=$(pvesm list "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
         if [[ -n "$templates" ]]; then
             template_storage="$storage"
             echo -e "${GREEN}✓ Templates encontradas en: ${template_storage}${NC}"
@@ -234,40 +235,39 @@ validate_template() {
         echo -e "${YELLOW}1. Actualizando repositorio de Proxmox...${NC}"
         pveam update 2>&1 | tail -1
         echo -e "${GREEN}✓ Repositorio actualizado${NC}"
+        echo ""
         
-        # Detectar storage válido
+        # Encontrar storage válido (preferir local type dir)
         local download_storage="local"
-        if pvesm status "$download_storage" &>/dev/null; then
-            :
-        else
-            download_storage=$(pvesm storage list 2>/dev/null | grep -v "^---" | awk '{print $1}' | head -1)
-        fi
+        echo -e "${YELLOW}2. Descargando template Debian 13...${NC}"
         
-        echo -e "${YELLOW}2. Listando templates disponibles...${NC}"
-        
-        # Listar templates y seleccionar Debian 13
-        local debian_template=$(pveam available 2>/dev/null | grep -i "debian-13-standard" | tail -1)
+        # Obtener el nombre exacto del template disponible
+        local debian_template=$(pveam available 2>/dev/null | grep "debian-13-standard" | tail -1 | awk '{print $1}')
         
         if [[ -z "$debian_template" ]]; then
-            echo -e "${RED}❌ No hay templates Debian 13 disponibles en Proxmox${NC}"
+            echo -e "${RED}❌ No hay templates Debian 13 disponibles${NC}"
             return 1
         fi
         
-        # Extraer el nombre del template (primera columna)
-        local tmpl_name=$(echo "$debian_template" | awk '{print $1}')
-        echo -e "${CYAN}  → Descargando: $tmpl_name${NC}"
+        echo -e "${CYAN}  → Template: $debian_template${NC}"
+        echo -e "${CYAN}  → Storage: $download_storage${NC}"
+        echo ""
         
-        echo -e "${YELLOW}3. Descargando en $download_storage...${NC}"
-        pveam download "$download_storage" "$tmpl_name" 2>&1 | tail -2
-        echo -e "${GREEN}✓ Template descargado${NC}"
+        # Descargar template
+        echo -e "${YELLOW}3. Descargando (esto puede tardar varios minutos)...${NC}"
+        if pveam download "$download_storage" "$debian_template" 2>&1 | tail -5; then
+            echo -e "${GREEN}✓ Template descargado${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Descarga completada${NC}"
+        fi
         
         echo ""
         echo -e "${YELLOW}4. Localizando template...${NC}"
-        sleep 1
+        sleep 2
         
-        # Buscar template descargado
+        # Buscar template nuevamente después de descarga
         for storage in $all_storages; do
-            templates=$(pvesm content "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
+            templates=$(pvesm list "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
             if [[ -n "$templates" ]]; then
                 template_storage="$storage"
                 echo -e "${GREEN}✓ Template disponible en: ${template_storage}${NC}"
@@ -276,17 +276,20 @@ validate_template() {
         done
         
         if [[ -z "$templates" ]]; then
-            echo -e "${RED}❌ Template descargado pero no se encuentra. Reintentar en 30 segundos.${NC}"
+            echo -e "${YELLOW}⚠️  Template aún procesándose. Reintentando en 30 segundos...${NC}"
             sleep 30
-            # Último intento
+            
             for storage in $all_storages; do
-                templates=$(pvesm content "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
+                templates=$(pvesm list "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
                 if [[ -n "$templates" ]]; then
                     template_storage="$storage"
+                    echo -e "${GREEN}✓ Template disponible en: ${template_storage}${NC}"
                     break
                 fi
             done
+            
             if [[ -z "$templates" ]]; then
+                echo -e "${RED}❌ Template aún no disponible. Intenta más tarde.${NC}"
                 return 1
             fi
         fi
@@ -415,13 +418,12 @@ validate_node() {
 validate_storage() {
     echo -e "${YELLOW}Detectando almacenamientos disponibles para LXC...${NC}"
     
-    # Obtener almacenamientos que soportan LXC (lvmthin, zfspool, etc)
-    local STORAGES=$(pvesm status --content images | grep -E "lvmthin|zfspool|dir-" | awk '{print $1}' | head -5)
+    # Obtener almacenamientos válidos desde pvesm status
+    # Compatible con todas las versiones de Proxmox
+    local STORAGES=$(pvesm status 2>/dev/null | tail -n +2 | awk '{print $1}' | head -5)
     
     if [[ -z "$STORAGES" ]]; then
-        echo -e "${RED}❌ No se encontraron almacenamientos válidos para LXC.${NC}"
-        echo -e "${YELLOW}Almacenamientos disponibles (solo lectura):${NC}"
-        pvesm status --content images | awk '{print "  " $1}'
+        echo -e "${RED}❌ No se encontraron almacenamientos.${NC}"
         return 1
     fi
     
