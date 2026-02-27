@@ -23,4 +23,5 @@ Este repositorio contiene **NGX_PM_PLUS.sh**, un script todo-en-uno para Proxmox
 1. Ejecutar directamente desde el host Proxmox con:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/TU_USUARIO/Proxmox-NPM-Installer/main/NGX_PM_PLUS.sh)"
+
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/3KNOX/Nginx-Proxy-Manager/main/NGX_PM_PLUS.sh)"
