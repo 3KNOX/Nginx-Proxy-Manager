@@ -226,18 +226,51 @@ validate_template() {
     done
     
     if [[ -z "$templates" ]]; then
-        echo -e "${RED}❌ No hay templates Debian en ningún storage${NC}"
+        echo -e "${YELLOW}⏳ No hay templates. Descargando automáticamente...${NC}"
         echo ""
-        echo -e "${YELLOW}Soluciones:${NC}"
-        echo "  1. Ver qué storages tienes:"
-        echo "     pvesm storage list"
-        echo "  2. Descargar templates en el storage local (tipo dir):"
-        echo "     pveam update"
-        echo "     pveam download local debian-13-standard_13.0-1_amd64.tar.gz"
-        echo "  3. O ver templates disponibles:"
-        echo "     pveam available | grep debian"
+        
+        # Actualizar repositorio de templates
+        echo -e "${YELLOW}1. Actualizando repositorio de Proxmox...${NC}"
+        if pveam update &>/dev/null; then
+            echo -e "${GREEN}✓ Repositorio actualizado${NC}"
+        else
+            echo -e "${RED}❌ Error al actualizar repositorio${NC}"
+            return 1
+        fi
+        
+        # Descargar template Debian 13
+        echo -e "${YELLOW}2. Descargando template Debian 13...${NC}"
+        if pveam download local debian-13-standard_13.0-1_amd64.tar.gz 2>&1 | grep -E "downloading|Complete"; then
+            echo -e "${GREEN}✓ Template descargado${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Intentando con otra versión disponible...${NC}"
+            # Fallback: descargar la más reciente disponible
+            local available_template=$(pveam available 2>/dev/null | grep "debian-13" | head -1 | awk '{print $1}')
+            if [[ -n "$available_template" ]]; then
+                pveam download local "$available_template" 2>&1 | tail -3
+                echo -e "${GREEN}✓ Template descargado: $available_template${NC}"
+            else
+                echo -e "${RED}❌ No se pudo descargar el template${NC}"
+                return 1
+            fi
+        fi
+        
         echo ""
-        return 1
+        echo -e "${YELLOW}3. Buscando template descargado...${NC}"
+        # Buscar de nuevo
+        for storage in $all_storages; do
+            templates=$(pvesm content "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
+            if [[ -n "$templates" ]]; then
+                template_storage="$storage"
+                echo -e "${GREEN}✓ Templates encontradas en: ${template_storage}${NC}"
+                break
+            fi
+        done
+        
+        if [[ -z "$templates" ]]; then
+            echo -e "${RED}❌ Aún no hay templates disponibles${NC}"
+            return 1
+        fi
     fi
     
     # Guardar storage de templates para usarlo luego
