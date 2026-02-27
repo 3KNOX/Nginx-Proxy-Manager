@@ -20,7 +20,7 @@ NC='\033[0m'
 
 CONFIG_FILE="/root/.npm_config"
 LOG_FILE="/root/npm_installer.log"
-SCRIPT_VERSION="2.9.0"
+SCRIPT_VERSION="2.9.1"
 
 # Constantes de formato
 MENU_WIDTH=59
@@ -791,6 +791,7 @@ services:
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
+      - ./nginx-spa.conf:/etc/nginx/conf.d/03-npm-spa-manager.conf:ro
     depends_on:
       npm_db:
         condition: service_healthy
@@ -820,6 +821,34 @@ services:
       retries: 30
       start_period: 30s
 YAML_END
+
+# Crear configuración Nginx personalizada para manejar SPA routing en puerto 81
+cat > nginx-spa.conf << 'NGINX_END'
+# Configuración personalizada para Nginx Proxy Manager - SPA Routing
+# Puerto 81 debe servir correctamente todas las rutas del panel
+
+# Redirigir rutas SPA que no corresponden a archivos estáticos a index.html
+location /app/ {
+    alias /app/frontend/;
+    index index.html index.htm;
+    try_files $uri $uri/ /index.html;
+}
+
+# Redirigir /nginx/ y otras rutas SPA a index.html
+location ~ ^/(nginx|audit-log|certificates|hosts|users|access-list|settings)/ {
+    proxy_pass http://localhost:3000;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+NGINX_END
+
 sed -i "s|NPMPASS_PLACEHOLDER|${DB_NPM_PASS}|g;s|ROOTPASS_PLACEHOLDER|${DB_ROOT_PASS}|g" docker-compose.yml
 docker compose up -d 2>&1 || { sleep 5; docker compose up -d; }
 

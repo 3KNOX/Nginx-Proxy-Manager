@@ -1,6 +1,6 @@
 # 🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER
 
-![Version](https://img.shields.io/badge/version-2.9.0-green.svg)
+![Version](https://img.shields.io/badge/version-2.9.1-green.svg)
 ![Proxmox](https://img.shields.io/badge/proxmox-7.x%2F8.x%2F9.x-orange.svg)
 ![Creator](https://img.shields.io/badge/creator-3KNOX-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -21,6 +21,7 @@
 - ✅ **Autodetección de almacenamiento** válido para LXC (búsqueda en pvesm:vztmpl)
 - ✅ **Docker + Docker Compose plugin** (no legacy) instalados y configurados
 - ✅ **Nginx Proxy Manager** - Última versión con interfaz web intuitiva
+- ✅ **SPA Routing Fix** - Configuración personalizada de Nginx para rutas dinámicas del panel (v2.9.1+)
 - ✅ **MariaDB Aria** para máximo rendimiento y persistencia
 - ✅ **SSL/TLS automático** con Let's Encrypt integrado
 - ✅ **Health checks avanzados** - espera inteligente para servicios
@@ -150,6 +151,7 @@ El script:
 ## 🌐 Acceso al Contenedor (v2.8.3)
 
 ### Cambios Recientes:
+- ✅ **Nginx SPA Routing Fix (v2.9.1)**: Configuración personalizada para navegación correcta del panel
 - ✅ **Autologin automático**: Entras como root **sin necesidad de credenciales**
 - ✅ **MOTD mejorado**: Muestra información limpia sin caracteres problemáticos
 - ✅ **Script de bienvenida**: Visualiza estado de servicios Docker al conectar
