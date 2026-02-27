@@ -20,7 +20,7 @@ NC='\033[0m'
 
 CONFIG_FILE="/root/.npm_config"
 LOG_FILE="/root/npm_installer.log"
-SCRIPT_VERSION="2.8.1"
+SCRIPT_VERSION="2.8.2"
 
 # Constantes de formato
 MENU_WIDTH=59
@@ -448,6 +448,68 @@ validate_input() {
     done
 }
 
+detect_network_config() {
+    # Detectar configuración de red del bridge usando /etc/network/interfaces
+    local bridge_ip=""
+    local bridge_netmask=""
+    local bridge_gateway=""
+    local bridge_cidr="24"  # Default
+    
+    # Buscar la configuración del bridge en /etc/network/interfaces
+    if [[ -f /etc/network/interfaces ]]; then
+        local in_bridge_section=0
+        local line_buffer=""
+        
+        while IFS= read -r line; do
+            # Si encontramos la sección del bridge
+            if [[ "$line" =~ ^auto.*$BRIDGE|^iface.*$BRIDGE ]]; then
+                in_bridge_section=1
+            fi
+            
+            # Extraer IP
+            if [[ $in_bridge_section -eq 1 ]] && [[ "$line" =~ ^[[:space:]]*address[[:space:]] ]]; then
+                bridge_ip=$(echo "$line" | awk '{print $2}')
+            fi
+            
+            # Extraer netmask
+            if [[ $in_bridge_section -eq 1 ]] && [[ "$line" =~ ^[[:space:]]*netmask[[:space:]] ]]; then
+                bridge_netmask=$(echo "$line" | awk '{print $2}')
+            fi
+            
+            # Extraer gateway
+            if [[ $in_bridge_section -eq 1 ]] && [[ "$line" =~ ^[[:space:]]*gateway[[:space:]] ]]; then
+                bridge_gateway=$(echo "$line" | awk '{print $2}')
+            fi
+            
+            # Si salimos de la sección, detener búsqueda
+            if [[ $in_bridge_section -eq 1 ]] && [[ "$line" =~ ^auto|^iface ]] && [[ ! "$line" =~ $BRIDGE ]]; then
+                in_bridge_section=0
+            fi
+        done < /etc/network/interfaces
+    fi
+    
+    # Convertir netmask a CIDR si se encontró
+    if [[ -n "$bridge_netmask" ]]; then
+        case "$bridge_netmask" in
+            255.255.255.0) bridge_cidr="24" ;;
+            255.255.255.128) bridge_cidr="25" ;;
+            255.255.255.192) bridge_cidr="26" ;;
+            255.255.255.224) bridge_cidr="27" ;;
+            255.255.255.240) bridge_cidr="28" ;;
+            255.255.255.248) bridge_cidr="29" ;;
+            255.255.255.252) bridge_cidr="30" ;;
+            255.255.0.0) bridge_cidr="16" ;;
+            255.0.0.0) bridge_cidr="8" ;;
+            *) bridge_cidr="24" ;;  # Default
+        esac
+    fi
+    
+    # Exportar variables detectadas
+    DETECTED_BRIDGE_IP="$bridge_ip"
+    DETECTED_BRIDGE_CIDR="$bridge_cidr"
+    DETECTED_BRIDGE_GATEWAY="${bridge_gateway:-192.168.1.1}"  # Default si no se detecta
+}
+
 request_static_ip() {
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
@@ -457,11 +519,29 @@ request_static_ip() {
     echo -e "${YELLOW}Nginx Proxy Manager requiere una IP fija para funcionar correctamente${NC}"
     echo ""
     
+    # Detectar configuración de red del bridge
+    detect_network_config
+    
+    # Mostrar configuración detectada
+    if [[ -n "$DETECTED_BRIDGE_IP" ]]; then
+        echo -e "${CYAN}Configuración detectada del bridge ${BRIDGE}:${NC}"
+        echo -e "  📡 Red: ${GREEN}${DETECTED_BRIDGE_IP}/${DETECTED_BRIDGE_CIDR}${NC}"
+        echo -e "  🚪 Gateway: ${GREEN}${DETECTED_BRIDGE_GATEWAY}${NC}"
+        echo ""
+    else
+        echo -e "${YELLOW}⚠️  No se pudo detectar la configuración de red automáticamente${NC}"
+        echo -e "  Usando valores por defecto: 192.168.1.0/24, Gateway: 192.168.1.1${NC}"
+        DETECTED_BRIDGE_CIDR="24"
+        DETECTED_BRIDGE_GATEWAY="192.168.1.1"
+        echo ""
+    fi
+    
+    # Solo solicitar la IP del contenedor
     validate_input "IP del contenedor" "CONTAINER_IP" "^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$" "IP inválida. Usa formato 192.168.1.100" "192.168.1.100"
     
-    validate_input "Máscara de red (CIDR)" "CONTAINER_CIDR" "^(8|16|24|25|26|27|28|29|30|31|32)$" "CIDR inválido. Usa valores entre 8-32 (típicamente 24 para /24)" "24"
-    
-    validate_input "Gateway (puerta de enlace)" "CONTAINER_GATEWAY" "^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$" "Gateway inválido. Usa formato 192.168.1.1" "192.168.1.1"
+    # Usar configuración detectada
+    CONTAINER_CIDR="$DETECTED_BRIDGE_CIDR"
+    CONTAINER_GATEWAY="$DETECTED_BRIDGE_GATEWAY"
     
     echo -e "${GREEN}✓ IP Estática configurada: ${CONTAINER_IP}/${CONTAINER_CIDR}${NC}"
     echo -e "${GREEN}✓ Gateway: ${CONTAINER_GATEWAY}${NC}"

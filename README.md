@@ -1,6 +1,6 @@
 # 🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER
 
-![Version](https://img.shields.io/badge/version-2.8.1-green.svg)
+![Version](https://img.shields.io/badge/version-2.8.2-green.svg)
 ![Proxmox](https://img.shields.io/badge/proxmox-7.x%2F8.x%2F9.x-orange.svg)
 ![Creator](https://img.shields.io/badge/creator-3KNOX-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -65,13 +65,13 @@ curl -fsSL https://raw.githubusercontent.com/3KNOX/Nginx-Proxy-Manager/refs/head
 
 ---
 
-## 📊 Menú Principal (V2.8.1)
+## 📊 Menú Principal (V2.8.2)
 
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
 ║     🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER 🚀         ║
-║                        v2.8.1                              ║
+║                        v2.8.2                              ║
 ║              Created by: 3KNOX                             ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
@@ -115,10 +115,12 @@ Se solicitarán:
 - **Nodo**: Host Proxmox (ej: pve) - Detectado automáticamente
 - **Bridge**: Red virtual (default: vmbr0) - Detectado automáticamente
 
-### 2️⃣.5️⃣ Configuración de IP Estática ⭐ NUEVO
-- **IP del contenedor**: Direccón IPv4 (ej: 192.168.1.100)
-- **Máscara de red (CIDR)**: Notación CIDR (ej: 24 para /24)
-- **Gateway**: Puerta de enlace de tu red (ej: 192.168.1.1)
+### 2️⃣.5️⃣ Configuración de IP Estática ⭐ NUEVO (v2.8.2)
+- **IP del contenedor**: Solo ingresa la dirección IPv4 (ej: 192.168.1.100)
+- **Máscara de red (CIDR)**: ✅ **Detectada automáticamente** del bridge
+- **Gateway**: ✅ **Detectado automáticamente** del bridge
+
+**El script lee `/etc/network/interfaces` para detectar la configuración del bridge automáticamente**
 
 **NOTA**: El contenedor NO utilizará DHCP. La IP que configures será fija y persistente.
 
@@ -182,7 +184,7 @@ Una vez completada la instalación:
 
 ---
 
-## 💾 Gestión de Configuración (V2.8.1)
+## 💾 Gestión de Configuración (V2.8.2)
 
 El script guarda automáticamente tu configuración en:
 
