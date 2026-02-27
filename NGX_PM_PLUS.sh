@@ -272,12 +272,47 @@ validate_vmid() {
     fi
 }
 
+get_current_node() {
+    # Detectar el nodo actual donde se ejecuta el script
+    local node
+    if command -v hostname &> /dev/null; then
+        node=$(hostname)
+        echo "$node"
+        return 0
+    fi
+    # Fallback para casos especiales
+    echo "pve"
+    return 0
+}
+
+generate_hostname() {
+    # Generar nombre automático basado en el VMID
+    echo "npm-$CTID"
+}
+
+get_bridge() {
+    # Detectar bridge principal disponible
+    local bridge
+    if grep -q "vmbr0" /proc/net/dev 2>/dev/null; then
+        bridge="vmbr0"
+    elif grep -q "vmbr1" /proc/net/dev 2>/dev/null; then
+        bridge="vmbr1"
+    else
+        bridge="vmbr0"  # Por defecto
+    fi
+    echo "$bridge"
+}
+
 validate_hostname() {
-    validate_input "Nombre del contenedor" "HOSTNAME" ".+" "El hostname no puede estar vacío" "npm-prod"
+    # Generar hostname automáticamente basado en VMID
+    HOSTNAME=$(generate_hostname)
+    echo -e "${GREEN}✓ Nombre del contenedor asignado automáticamente: ${HOSTNAME}${NC}"
 }
 
 validate_node() {
-    validate_input "Nodo de Proxmox" "NODE" ".+" "El nodo no puede estar vacío" "pve"
+    # Detectar el nodo actual automáticamente
+    NODE=$(get_current_node)
+    echo -e "${GREEN}✓ Nodo detectado automáticamente: ${NODE}${NC}"
 }
 
 validate_storage() {
@@ -335,12 +370,13 @@ install_npm() {
     validate_internet || return 1
     
     validate_vmid
-    validate_hostname
-    validate_node
+    validate_hostname      # Ahora automático
+    validate_node          # Ahora automático
     validate_storage || return 1
     
-    read -p "$(echo -e "${YELLOW}Bridge de red${NC}") (default vmbr0): " BRIDGE
-    BRIDGE=${BRIDGE:-vmbr0}
+    # Bridge automático (por defecto vmbr0)
+    BRIDGE=$(get_bridge)
+    echo -e "${GREEN}✓ Bridge de red asignado automáticamente: ${BRIDGE}${NC}"
     
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
@@ -359,9 +395,9 @@ install_npm() {
     echo -e "${CYAN}║${NC}  VMID: ${GREEN}$CTID${NC}          Hostname: ${GREEN}$HOSTNAME${NC}${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  Nodo: ${GREEN}$NODE${NC}          Bridge: ${GREEN}$BRIDGE${NC}${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  RAM: ${GREEN}${RAM}MB${NC} | CPU: ${GREEN}${CPU}${NC} | Disco: ${GREEN}${DISK}GB${NC}      ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  Perfil: ${GREEN}${PROFILE}${NC}                                  ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  Perfil: ${GREEN}${PROFILE}${NC}         Almac: ${GREEN}${STORAGE}${NC}${CYAN}║${NC}"
     echo -e "$HEADER_BOT"
-    echo -e "${YELLOW}¿Confirmas la instalación? (s/n):${NC} "
+    echo -e "${YELLOW}¿Confirmas? (s/n):${NC} "
     read CONFIRM
     
     if [[ "$CONFIRM" != "s" && "$CONFIRM" != "S" ]]; then
@@ -381,7 +417,9 @@ install_npm() {
     echo -e "${CYAN}Creando contenedor LXC Debian 13...${NC}"
     TEMPLATE="debian-13-standard_13.0-1_amd64.tar.gz"
     
-    pct create $CTID $STORAGE:vztmpl/$TEMPLATE \
+    # Nota: Las templates siempre están en almacenamiento 'local:vztmpl'
+    # El almacenamiento dinámico ($STORAGE) es solo para el rootfs
+    pct create $CTID local:vztmpl/$TEMPLATE \
         --cores $CPU \
         --memory $RAM \
         --swap 512 \
