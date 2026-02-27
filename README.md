@@ -1,6 +1,6 @@
 # 🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER
 
-![Version](https://img.shields.io/badge/version-2.8.5-green.svg)
+![Version](https://img.shields.io/badge/version-2.8.3--stable-green.svg)
 ![Proxmox](https://img.shields.io/badge/proxmox-7.x%2F8.x%2F9.x-orange.svg)
 ![Creator](https://img.shields.io/badge/creator-3KNOX-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -69,13 +69,13 @@ curl -fsSL https://raw.githubusercontent.com/3KNOX/Nginx-Proxy-Manager/refs/head
 
 ---
 
-## 📊 Menú Principal (V2.8.5)
+## 📊 Menú Principal (V2.8.3-Stable)
 
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
 ║     🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER 🚀         ║
-║                        v2.8.5                              ║
+║                        v2.8.3-stable                        ║
 ║              Created by: 3KNOX                             ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
@@ -215,7 +215,7 @@ Contraseña: changeme
 
 ---
 
-## 💾 Gestión de Configuración (V2.8.5)
+## 💾 Gestión de Configuración (V2.8.3-Stable)
 
 El script guarda automáticamente tu configuración en:
 
