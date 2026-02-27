@@ -209,26 +209,69 @@ edit_urls() {
 ################################################################################
 
 validate_template() {
-    echo -e "${YELLOW}Buscando template Debian 13...${NC}"
+    echo -e "${YELLOW}Buscando templates Debian en todos los storages...${NC}"
     
-    # Buscar en todos los almacenamientos
-    if find /var/lib/vz/template/cache /mnt/pve -name "*debian-13-standard*" 2>/dev/null | grep -q "debian-13"; then
-        echo -e "${GREEN}✓ Template encontrada${NC}"
+    # Buscar templates en TODOS los storages (no solo local)
+    local templates=""
+    local template_storage=""
+    local all_storages=$(pvesm storage list 2>/dev/null | grep -v "^---" | awk '{print $1}')
+    
+    for storage in $all_storages; do
+        templates=$(pvesm content "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
+        if [[ -n "$templates" ]]; then
+            template_storage="$storage"
+            echo -e "${GREEN}✓ Templates encontradas en: ${template_storage}${NC}"
+            break
+        fi
+    done
+    
+    if [[ -z "$templates" ]]; then
+        echo -e "${RED}❌ No hay templates Debian en ningún storage${NC}"
+        echo ""
+        echo -e "${YELLOW}Soluciones:${NC}"
+        echo "  1. Ver qué storages tienes:"
+        echo "     pvesm storage list"
+        echo "  2. Descargar templates en el storage local (tipo dir):"
+        echo "     pveam update"
+        echo "     pveam download local debian-13-standard_13.0-1_amd64.tar.gz"
+        echo "  3. O ver templates disponibles:"
+        echo "     pveam available | grep debian"
+        echo ""
+        return 1
+    fi
+    
+    # Guardar storage de templates para usarlo luego
+    TEMPLATE_STORAGE="$template_storage"
+    
+    # Si hay una sola, seleccionarla automáticamente
+    local template_count=$(echo "$templates" | wc -l)
+    if [[ $template_count -eq 1 ]]; then
+        TEMPLATE="$templates"
+        echo -e "${GREEN}✓ Template seleccionada: ${TEMPLATE}${NC}"
         return 0
     fi
     
-    echo -e "${RED}❌ Template Debian 13 no encontrada.${NC}"
-    echo -e "${YELLOW}Opciones para descargarla:${NC}"
+    # Si hay múltiples, permitir seleccionar
+    echo -e "${CYAN}Templates disponibles en ${template_storage}:${NC}"
+    local i=1
+    declare -a template_array
+    while IFS= read -r template; do
+        echo "  [$i] $template"
+        template_array[$i]="$template"
+        ((i++))
+    done <<< "$templates"
+    
     echo ""
-    echo "  Opción 1: Mediante Proxmox UI"
-    echo "    - Ir a: Datacenter → Storage → local → Content"
-    echo "    - Buscar y descargar: debian-13-standard"
-    echo ""
-    echo "  Opción 2: Por terminal (root en Proxmox)"
-    echo "    pveam update"
-    echo "    pveam download local debian-13-standard_13.0-1_amd64.tar.gz"
-    echo ""
-    return 1
+    while true; do
+        read -p "$(echo -e "${YELLOW}Elige template${NC}) (1-$((i-1))): " template_choice
+        if [[ "$template_choice" =~ ^[0-9]+$ ]] && [[ $template_choice -ge 1 ]] && [[ $template_choice -lt $i ]]; then
+            TEMPLATE="${template_array[$template_choice]}"
+            echo -e "${GREEN}✓ Template: ${TEMPLATE}${NC}"
+            return 0
+        else
+            echo -e "${RED}❌ Opción inválida.${NC}"
+        fi
+    done
 }
 
 validate_internet() {
@@ -395,7 +438,7 @@ install_npm() {
     echo -e "${CYAN}║${NC}  VMID: ${GREEN}$CTID${NC}          Hostname: ${GREEN}$HOSTNAME${NC}${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  Nodo: ${GREEN}$NODE${NC}          Bridge: ${GREEN}$BRIDGE${NC}${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  RAM: ${GREEN}${RAM}MB${NC} | CPU: ${GREEN}${CPU}${NC} | Disco: ${GREEN}${DISK}GB${NC}      ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  Perfil: ${GREEN}${PROFILE}${NC}         Almac: ${GREEN}${STORAGE}${NC}${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  Perfil: ${GREEN}${PROFILE}${NC}    Template: ${GREEN}${TEMPLATE_STORAGE}${NC}${CYAN}║${NC}"
     echo -e "$HEADER_BOT"
     echo -e "${YELLOW}¿Confirmas? (s/n):${NC} "
     read CONFIRM
@@ -414,12 +457,12 @@ install_npm() {
     DB_IMAGE=${DB_IMAGE:-$DEFAULT_DB_IMAGE}
     
     # Crear contenedor
-    echo -e "${CYAN}Creando contenedor LXC Debian 13...${NC}"
-    TEMPLATE="debian-13-standard_13.0-1_amd64.tar.gz"
-    
-    # Nota: Las templates siempre están en almacenamiento 'local:vztmpl'
+    echo -e "${CYAN}Creando contenedor LXC...${NC}"
+    echo -e "${YELLOW}Template Storage: ${TEMPLATE_STORAGE}${NC}"
+    echo -e "${YELLOW}Template: ${TEMPLATE}${NC}"
+    # TEMPLATE Storage detectado en validate_template()
     # El almacenamiento dinámico ($STORAGE) es solo para el rootfs
-    pct create $CTID local:vztmpl/$TEMPLATE \
+    pct create $CTID $TEMPLATE_STORAGE:vztmpl/$TEMPLATE \
         --cores $CPU \
         --memory $RAM \
         --swap 512 \
