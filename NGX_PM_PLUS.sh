@@ -267,36 +267,48 @@ validate_template() {
         fi
         
         echo ""
-        echo -e "${YELLOW}4. Localizando template...${NC}"
-        sleep 2
+        echo -e "${YELLOW}4. Procesando template (puede tomar 1-2 minutos)...${NC}"
         
-        # Buscar template nuevamente después de descarga
-        for storage in $all_storages; do
-            templates=$(pvesm list "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
-            if [[ -n "$templates" ]]; then
-                template_storage="$storage"
-                echo -e "${GREEN}✓ Template disponible en: ${template_storage}${NC}"
-                break
-            fi
-        done
+        # Esperar a que Proxmox indexe el template
+        local max_attempts=10
+        local attempt=1
         
-        if [[ -z "$templates" ]]; then
-            echo -e "${YELLOW}⚠️  Template aún procesándose. Reintentando en 30 segundos...${NC}"
-            sleep 30
+        while [[ $attempt -le $max_attempts ]]; do
+            echo -n "."
             
+            # Buscar en pvesm
             for storage in $all_storages; do
                 templates=$(pvesm list "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
                 if [[ -n "$templates" ]]; then
                     template_storage="$storage"
-                    echo -e "${GREEN}✓ Template disponible en: ${template_storage}${NC}"
+                    echo -e "\n${GREEN}✓ Template indexado en: ${template_storage}${NC}"
                     break
                 fi
             done
             
-            if [[ -z "$templates" ]]; then
-                echo -e "${RED}❌ Template aún no disponible. Intenta más tarde.${NC}"
-                return 1
+            # Si encontramos, salir
+            if [[ -n "$templates" ]]; then
+                break
             fi
+            
+            # Si no, buscar directamente en filesystem como respaldo
+            if [[ $attempt -gt 3 ]]; then
+                local fs_template=$(find /var/lib/vz/template/cache -name "*debian-13*" -type f 2>/dev/null | head -1)
+                if [[ -n "$fs_template" ]]; then
+                    echo -e "\n${GREEN}✓ Template encontrado en filesystem: $(basename $fs_template)${NC}"
+                    templates=$(basename "$fs_template")
+                    template_storage="$download_storage"
+                    break
+                fi
+            fi
+            
+            sleep 10
+            ((attempt++))
+        done
+        
+        if [[ -z "$templates" ]]; then
+            echo -e "\n${RED}❌ Template no disponible después de varios intentos.${NC}"
+            return 1
         fi
     fi
     
@@ -521,9 +533,16 @@ install_npm() {
     echo -e "${CYAN}Creando contenedor LXC...${NC}"
     echo -e "${YELLOW}Template Storage: ${TEMPLATE_STORAGE}${NC}"
     echo -e "${YELLOW}Template: ${TEMPLATE}${NC}"
+    
     # TEMPLATE Storage detectado en validate_template()
     # El almacenamiento dinámico ($STORAGE) es solo para el rootfs
-    pct create $CTID $TEMPLATE_STORAGE:vztmpl/$TEMPLATE \
+    # Si el template es un archivo direct (no indexado), usar ruta completa
+    local template_source="$TEMPLATE_STORAGE:vztmpl/$TEMPLATE"
+    if [[ "$TEMPLATE" == *.tar.zst ]]; then
+        template_source="$TEMPLATE_STORAGE:vztmpl/$TEMPLATE"
+    fi
+    
+    pct create $CTID "$template_source" \
         --cores $CPU \
         --memory $RAM \
         --swap 512 \
