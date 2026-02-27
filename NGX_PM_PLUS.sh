@@ -606,7 +606,8 @@ install_npm() {
         --password "$DB_ROOT_PASS" \
         --nameserver 8.8.8.8 \
         --searchdomain local \
-        --unprivileged 0
+        --unprivileged 0 \
+        --features nesting=1
     
     pct start $CTID
     echo -e "${GREEN}✓ Contenedor iniciado${NC}"
@@ -650,8 +651,6 @@ DOCKER_NET=npm_network
 docker network create \$DOCKER_NET 2>/dev/null || true
 
 cat <<'COMPOSE' > docker-compose.yml
-version: '3.8'
-
 networks:
   npm_net:
     external: true
