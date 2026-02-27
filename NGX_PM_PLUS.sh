@@ -226,13 +226,16 @@ validate_template() {
     local template_storage=""
     local all_storages=$(pvesm status 2>/dev/null | tail -n +2 | awk '{print $1}')
     
-    # Buscar templates en cada storage
+    # Buscar templates en cada storage (buscar en vztmpl, no en images)
     for storage in $all_storages; do
-        templates=$(pvesm list "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
+        templates=$(pvesm list "$storage:vztmpl" 2>/dev/null | grep -i "debian-13" | awk '{print $1}' | head -1)
         if [[ -n "$templates" ]]; then
             template_storage="$storage"
-            echo -e "${GREEN}✓ Templates encontradas en: ${template_storage}${NC}"
-            break
+            echo -e "${GREEN}✓ Template encontrado: $templates${NC}"
+            echo -e "${GREEN}✓ Storage: ${template_storage}${NC}"
+            TEMPLATE="$templates"
+            TEMPLATE_STORAGE="$template_storage"
+            return 0
         fi
     done
     
@@ -336,7 +339,7 @@ validate_template() {
             # Buscar en pvesm
             local found=0
             for storage in $all_storages; do
-                templates=$(pvesm list "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
+                templates=$(pvesm list "$storage:vztmpl" 2>/dev/null | grep -i "debian-13" | awk '{print $1}' | head -1)
                 if [[ -n "$templates" ]]; then
                     template_storage="$storage"
                     found=1
