@@ -258,36 +258,85 @@ validate_template() {
         echo -e "${CYAN}  → Storage: $download_storage${NC}"
         echo ""
         
-        # Descargar template
-        echo -e "${YELLOW}3. Descargando (esto puede tardar varios minutos)...${NC}"
-        if pveam download "$download_storage" "$debian_template" 2>&1 | tail -5; then
-            echo -e "${GREEN}✓ Template descargado${NC}"
+        # Descargar template con indicador de progreso
+        echo -e "${YELLOW}3. Descargando ${debian_template}...${NC}"
+        echo -e "${CYAN}   (Esto puede tardar 5-15 minutos según tu conexión)${NC}"
+        echo ""
+        
+        # Ejecutar descarga mostrando salida completa
+        echo -e "${YELLOW}Iniciando descarga...${NC}"
+        
+        # Crear archivo temporal para log
+        local download_log="/tmp/pveam_download_$$.log"
+        
+        # Descargar en background con log
+        pveam download "$download_storage" "$debian_template" > "$download_log" 2>&1 &
+        local download_pid=$!
+        
+        # Mostrar spinner mientras se descarga
+        local spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+        local i=0
+        
+        while kill -0 $download_pid 2>/dev/null; do
+            printf "\r${CYAN}  %s Descargando...${NC}" "${spinner[$((i % ${#spinner[@]}))]}"
+            ((i++))
+            sleep 0.5
+        done
+        
+        # Esperar a que termine
+        wait $download_pid
+        local download_status=$?
+        
+        echo ""
+        echo ""
+        
+        # Mostrar resultado
+        if [[ $download_status -eq 0 ]]; then
+            echo -e "${GREEN}✓ Template descargado correctamente${NC}"
         else
             echo -e "${YELLOW}⚠️  Descarga completada${NC}"
         fi
         
+        # Mostrar últimas líneas del log si hay error
+        if [[ $download_status -ne 0 ]] && [[ -f "$download_log" ]]; then
+            echo -e "${YELLOW}Detalles:${NC}"
+            tail -3 "$download_log" | sed 's/^/  /'
+        fi
+        
+        # Limpiar archivo temporal
+        rm -f "$download_log"
+        
         echo ""
-        echo -e "${YELLOW}4. Procesando template (puede tomar 1-2 minutos)...${NC}"
+        echo -e "${YELLOW}4. Procesando y indexando template...${NC}"
+        echo -e "${CYAN}   (Esperando a que Proxmox indexe el archivo)${NC}"
         
         # Esperar a que Proxmox indexe el template
-        local max_attempts=10
+        local max_attempts=12
         local attempt=1
+        local spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
         
         while [[ $attempt -le $max_attempts ]]; do
-            echo -n "."
+            # Mostrar spinner
+            printf "\r${CYAN}  %s Intento %d/%d (espera ~%d segundos)${NC}" \
+                "${spinner[$((($attempt-1) % ${#spinner[@]}))]}" \
+                "$attempt" \
+                "$max_attempts" \
+                "$(((max_attempts - attempt) * 10))"
             
             # Buscar en pvesm
+            local found=0
             for storage in $all_storages; do
                 templates=$(pvesm list "$storage" --content images 2>/dev/null | grep -i "debian" | awk '{print $1}')
                 if [[ -n "$templates" ]]; then
                     template_storage="$storage"
-                    echo -e "\n${GREEN}✓ Template indexado en: ${template_storage}${NC}"
+                    found=1
                     break
                 fi
             done
             
-            # Si encontramos, salir
-            if [[ -n "$templates" ]]; then
+            # Si encontramos en pvesm, salir
+            if [[ $found -eq 1 ]]; then
+                echo -e "\n${GREEN}✓ Template indexado en pvesm: ${template_storage}${NC}"
                 break
             fi
             
@@ -298,11 +347,16 @@ validate_template() {
                     echo -e "\n${GREEN}✓ Template encontrado en filesystem: $(basename $fs_template)${NC}"
                     templates=$(basename "$fs_template")
                     template_storage="$download_storage"
+                    found=1
                     break
                 fi
             fi
             
-            sleep 10
+            # Si no encontramos y hay más intentos, esperar
+            if [[ $found -eq 0 ]] && [[ $attempt -lt $max_attempts ]]; then
+                sleep 10
+            fi
+            
             ((attempt++))
         done
         
