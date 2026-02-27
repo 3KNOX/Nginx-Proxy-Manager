@@ -24,4 +24,5 @@ Este repositorio contiene **NGX_PM_PLUS.sh**, un script todo-en-uno para Proxmox
 
 ```bash
 
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/3KNOX/Nginx-Proxy-Manager/main/NGX_PM_PLUS.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/3KNOX/Nginx-Proxy-Manager/refs/heads/main/NGX_PM_PLUS.sh)"
+
