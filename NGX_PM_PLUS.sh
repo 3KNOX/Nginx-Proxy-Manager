@@ -635,11 +635,31 @@ install_npm() {
 set -e
 export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 apt update && apt upgrade -y
-apt install -y curl ca-certificates gnupg lsb-release sudo vim net-tools jq procps iputils-ping wget
+apt install -y curl ca-certificates gnupg lsb-release sudo vim net-tools jq procps iputils-ping wget netcat-openbsd
 ! command -v docker &>/dev/null && { curl -fsSL https://get.docker.com | sh; systemctl enable docker; systemctl start docker; }
 mkdir -p /root/nginx-proxy-manager/{data/mysql,letsencrypt,backups}
 cd /root/nginx-proxy-manager
 docker network create npm_network 2>/dev/null || true
+
+# Crear script de espera para conexión a BD
+cat > /root/nginx-proxy-manager/wait-for-db.sh << 'WAITSCRIPT'
+#!/bin/bash
+set -e
+host="$1"
+port="$2"
+shift 2
+cmd="$@"
+
+until nc -z "$host" "$port"; do
+  >&2 echo "Base de datos en $host:$port aún no está lista - esperando..."
+  sleep 2
+done
+
+>&2 echo "Base de datos lista - ejecutando comando..."
+exec $cmd
+WAITSCRIPT
+chmod +x /root/nginx-proxy-manager/wait-for-db.sh
+
 cat > docker-compose.yml << 'YAML_END'
 networks:
   npm_net:
@@ -663,7 +683,14 @@ services:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
     depends_on:
-      - npm_db
+      npm_db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:81/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
   npm_db:
     image: jc21/mariadb-aria:latest
     container_name: npm_db
@@ -677,9 +704,37 @@ services:
       MARIADB_AUTO_UPGRADE: '1'
     volumes:
       - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "-u", "root", "-pROOTPASS_PLACEHOLDER"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 YAML_END
 sed -i "s|NPMPASS_PLACEHOLDER|$DB_NPM_PASS|g;s|ROOTPASS_PLACEHOLDER|$DB_ROOT_PASS|g" docker-compose.yml
 docker compose up -d 2>&1 || { sleep 5; docker compose up -d; }
+
+# Esperar a que MariaDB esté lista
+echo "Esperando a que la base de datos esté lista..."
+for i in {1..60}; do
+  if docker exec npm_db mariadb-admin ping -h 127.0.0.1 -u root -pROOTPASS_PLACEHOLDER &>/dev/null 2>&1; then
+    echo "✓ Base de datos lista"
+    break
+  fi
+  echo "Intento $i/60..."
+  sleep 2
+done
+
+# Esperar a que Nginx Proxy Manager esté listo
+echo "Esperando a que Nginx Proxy Manager esté listo..."
+for i in {1..60}; do
+  if docker exec npm_app curl -s http://localhost:81 > /dev/null 2>&1; then
+    echo "✓ Nginx Proxy Manager listo"
+    break
+  fi
+  echo "Intento $i/60..."
+  sleep 2
+done
 mkdir -p /etc/update-motd.d
 cat > /etc/update-motd.d/00-header << 'MOTD_END'
 #!/bin/bash
