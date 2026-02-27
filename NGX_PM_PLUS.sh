@@ -622,168 +622,89 @@ install_npm() {
     pct start $CTID
     echo -e "${GREEN}✓ Contenedor iniciado${NC}"
     
-    # Script de instalación
-    INSTALL_SCRIPT="/root/install_npm.sh"
+    # Crear script de instalación en el HOST (evita problemas de heredoc)
+    LOCAL_SCRIPT="/tmp/npm_install_$CTID.sh"
+    CONTAINER_SCRIPT="/root/install_npm.sh"
     
-    # Escapar contraseñas
-    ROOT_PASS_ESCAPED=$(printf '%s' "$DB_ROOT_PASS" | sed "s/'/\\\\\\\\'/g" | sed 's/\\/\\\\\\\\\\\\/g')
-    NPM_PASS_ESCAPED=$(printf '%s' "$DB_NPM_PASS" | sed "s/'/\\\\\\\\'/g" | sed 's/\\/\\\\\\\\\\\\/g')
-    
-    pct exec $CTID -- bash -c "cat <<'EOF' > $INSTALL_SCRIPT
+    # Crear el script directamente en el host SIN usar pct exec
+    cat > "$LOCAL_SCRIPT" << 'SCRIPT_END'
 #!/bin/bash
 set -e
-
-# Configurar locales para eliminar warnings
-export LANG=C.UTF-8
-export LC_ALL=C.UTF-8
-export DEBIAN_FRONTEND=noninteractive
-
-echo 'Actualizando sistema...'
+export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 apt update && apt upgrade -y
 apt install -y curl ca-certificates gnupg lsb-release sudo vim net-tools jq procps iputils-ping wget
-
-echo 'Instalando Docker...'
-if ! command -v docker &> /dev/null; then
-  curl -fsSL $DOCKER_URL -o get-docker.sh
-  chmod +x get-docker.sh
-  sh get-docker.sh
-  systemctl enable docker
-  systemctl start docker
-fi
-
-echo 'Docker Compose ya incluido en docker-compose-plugin'
-
-NPM_ROOT=/root/nginx-proxy-manager
-mkdir -p \$NPM_ROOT/{data/mysql,letsencrypt,backups}
-cd \$NPM_ROOT
-
-DOCKER_NET=npm_network
-docker network create \$DOCKER_NET 2>/dev/null || true
-
-cat <<'COMPOSE' > docker-compose.yml
+! command -v docker &>/dev/null && { curl -fsSL https://get.docker.com | sh; systemctl enable docker; systemctl start docker; }
+mkdir -p /root/nginx-proxy-manager/{data/mysql,letsencrypt,backups}
+cd /root/nginx-proxy-manager
+docker network create npm_network 2>/dev/null || true
+cat > docker-compose.yml << 'YAML_END'
 networks:
   npm_net:
     external: true
     name: npm_network
-
 services:
   npm_app:
-    image: $NPM_IMAGE
+    image: jc21/nginx-proxy-manager:latest
     container_name: npm_app
     restart: unless-stopped
-    networks:
-      - npm_net
-    ports:
-      - \"80:80\"
-      - \"443:443\"
-      - \"81:81\"
+    networks: [npm_net]
+    ports: ["80:80", "443:443", "81:81"]
     environment:
       TZ: 'America/Mexico_City'
       DB_MYSQL_HOST: 'npm_db'
       DB_MYSQL_PORT: 3306
       DB_MYSQL_USER: npm
-      DB_MYSQL_PASSWORD: '${NPM_PASS_ESCAPED}'
+      DB_MYSQL_PASSWORD: 'NPMPASS_PLACEHOLDER'
       DB_MYSQL_NAME: 'npm'
     volumes:
       - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
     depends_on:
       - npm_db
-    healthcheck:
-      test: [\"CMD\", \"curl\", \"-f\", \"http://localhost:81\"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
   npm_db:
-    image: $DB_IMAGE
+    image: jc21/mariadb-aria:latest
     container_name: npm_db
     restart: unless-stopped
-    networks:
-      - npm_net
+    networks: [npm_net]
     environment:
-      MYSQL_ROOT_PASSWORD: '${ROOT_PASS_ESCAPED}'
+      MYSQL_ROOT_PASSWORD: 'ROOTPASS_PLACEHOLDER'
       MYSQL_DATABASE: 'npm'
       MYSQL_USER: npm
-      MYSQL_PASSWORD: '${NPM_PASS_ESCAPED}'
+      MYSQL_PASSWORD: 'NPMPASS_PLACEHOLDER'
       MARIADB_AUTO_UPGRADE: '1'
     volumes:
       - ./data/mysql:/var/lib/mysql
-    healthcheck:
-      test: [\"CMD\", \"mariadb-admin\", \"ping\", \"-h\", \"127.0.0.1\"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-COMPOSE
-
-echo 'Levantando contenedores con reintentos...'
-for i in {1..3}; do
-  if docker compose up -d; then
-    echo 'Contenedores levantados exitosamente'
-    break
-  else
-    echo \"Reintento \$i/3...\"
-    sleep 5
-  fi
-done
-
-if [ \"$BACKUP\" == \"si\" ]; then
-  cat <<'BCK' > backup_npm.sh
+YAML_END
+sed -i "s|NPMPASS_PLACEHOLDER|$DB_NPM_PASS|g;s|ROOTPASS_PLACEHOLDER|$DB_ROOT_PASS|g" docker-compose.yml
+docker compose up -d 2>&1 || { sleep 5; docker compose up -d; }
+mkdir -p /etc/update-motd.d
+cat > /etc/update-motd.d/00-header << 'MOTD_END'
 #!/bin/bash
-BACKUP_DIR=/root/nginx-proxy-manager/backups
-mkdir -p \$BACKUP_DIR
-TIMESTAMP=\$(date +\"%Y%m%d_%H%M%S\")
-docker exec npm_db /usr/bin/mysqldump -u root -p'${ROOT_PASS_ESCAPED}' npm > \"\$BACKUP_DIR/npm_db_\$TIMESTAMP.sql\"
-tar -czf \"\$BACKUP_DIR/npm_data_\$TIMESTAMP.tar.gz\" -C /root/nginx-proxy-manager data
-echo \"Backup completado: \$TIMESTAMP\"
-BCK
-  chmod +x backup_npm.sh
-fi
-
-# Crear script de bienvenida (motd dinámico)
-cat <<'MOTD_SCRIPT' > /etc/update-motd.d/00-header
-#!/bin/bash
+echo -e "\033[1;36m$(lsb_release -ds) $(hostname) tty1\033[0m"
+echo "$(hostname) login: root (automatic login)"
 echo ""
-echo -e \"\\033[1;36m\$(lsb_release -ds) \$(hostname) tty1\\033[0m\"
-echo \"\"
-echo \"\$(hostname) login: root (automatic login)\"
-echo \"\"
-echo \"\"
-echo \"The programs included with the Debian GNU/Linux system are free software;\"
-echo \"the exact distribution terms for each program are described in the\"
-echo \"individual files in /usr/share/doc/*/copyright.\"
-echo \"\"
-echo \"Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent\"
-echo \"permitted by applicable law.\"
-echo \"\"
-echo -e \"\\033[1;32mNginx Proxy Manager LXC Container\\033[0m\"
-echo \"    🌐   Provided by: 3KNOX | GitHub: https://github.com/3KNOX\"
-echo \"\"
-DEBIAN_VERSION=\$(lsb_release -rs)
-echo \"    🖥️   OS: Debian GNU/Linux - Version: \$DEBIAN_VERSION\"
-echo \"    🏠   Hostname: \$(hostname)\"
-IP_ADDR=\$(hostname -I | awk '{print \$1}')
-echo \"    💡   IP Address: \$IP_ADDR\"
-echo \"\"
-MOTD_SCRIPT
-
+echo "The programs included with the Debian GNU/Linux system are free software;"
+echo ""
+echo -e "\033[1;32mNginx Proxy Manager LXC Container\033[0m"
+echo "    🌐   Provided by: 3KNOX | GitHub: https://github.com/3KNOX"
+echo "    🖥️   OS: Debian GNU/Linux - Version: $(lsb_release -rs)"
+echo "    🏠   Hostname: $(hostname)"
+echo "    💡   IP Address: $(hostname -I | awk '{print $1}')"
+echo ""
+MOTD_END
 chmod 755 /etc/update-motd.d/00-header
+rm -f /etc/motd && run-parts /etc/update-motd.d > /etc/motd 2>/dev/null || true
+grep -q "cat /etc/motd" /root/.bashrc || echo "[ -r /etc/motd ] && cat /etc/motd" >> /root/.bashrc
+SCRIPT_END
 
-# Limpiar motd antiguo
-rm -f /etc/motd
-run-parts /etc/update-motd.d > /etc/motd 2>/dev/null || true
-
-# Agregar motd a .bashrc para mostrar al login
-if ! grep -q "cat /etc/motd" /root/.bashrc; then
-  echo "" >> /root/.bashrc
-  echo "# Mostrar MOTD al entrar" >> /root/.bashrc
-  echo "[ -r /etc/motd ] && cat /etc/motd" >> /root/.bashrc
-fi
-EOF"
+    chmod +x "$LOCAL_SCRIPT"
     
-    pct exec $CTID -- bash $INSTALL_SCRIPT
+    # Copiar y ejecutar
+    pct push $CTID "$LOCAL_SCRIPT" "$CONTAINER_SCRIPT"
+    pct exec $CTID -- bash "$CONTAINER_SCRIPT"
+    
+    # Limpiar archivo temporal
+    rm -f "$LOCAL_SCRIPT"
     
     # Detectar IP con reintentos
     echo -e "${YELLOW}Detectando IP del contenedor...${NC}"
