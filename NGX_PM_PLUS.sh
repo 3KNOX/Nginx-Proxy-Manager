@@ -131,7 +131,7 @@ show_main_menu() {
     )
     
     show_menu "MENÚ PRINCIPAL" "${options[@]}"
-    read -p "$(echo -e ${GREEN}Elige opción${NC}) (0-7): " MAIN_OPTION
+    read -p "$(echo -e "${GREEN}Elige opción${NC}") (0-7): " MAIN_OPTION
 }
 
 show_config() {
@@ -263,7 +263,7 @@ validate_template() {
     
     echo ""
     while true; do
-        read -p "$(echo -e "${YELLOW}Elige template${NC}) (1-$((i-1))): " template_choice
+        read -p "$(echo -e "${YELLOW}Elige template${NC}") (1-$((i-1))): " template_choice
         if [[ "$template_choice" =~ ^[0-9]+$ ]] && [[ $template_choice -ge 1 ]] && [[ $template_choice -lt $i ]]; then
             TEMPLATE="${template_array[$template_choice]}"
             echo -e "${GREEN}✓ Template: ${TEMPLATE}${NC}"
@@ -388,7 +388,7 @@ validate_storage() {
     done
     
     while true; do
-        read -p "$(echo -e ${YELLOW}Elige almacenamiento${NC}) (1-$((i-1))): " STORAGE_CHOICE
+        read -p "$(echo -e "${YELLOW}Elige almacenamiento${NC}") (1-$((i-1))): " STORAGE_CHOICE
         
         if [[ "$STORAGE_CHOICE" =~ ^[0-9]+$ ]] && [[ $STORAGE_CHOICE -ge 1 ]] && [[ $STORAGE_CHOICE -lt $i ]]; then
             STORAGE="${STORAGE_ARRAY[$((STORAGE_CHOICE-1))]}"
