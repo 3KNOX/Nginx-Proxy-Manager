@@ -1,6 +1,6 @@
 # 🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER
 
-![Version](https://img.shields.io/badge/version-2.7.4-green.svg)
+![Version](https://img.shields.io/badge/version-2.8.1-green.svg)
 ![Proxmox](https://img.shields.io/badge/proxmox-7.x%2F8.x%2F9.x-orange.svg)
 ![Creator](https://img.shields.io/badge/creator-3KNOX-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -11,7 +11,8 @@
 
 ## ✨ Características Principales
 
-- ✅ **Menú interactivo** con 3 niveles de optimización (Normal, Media, Excelente)
+- ✅ **Menú interactivo** con 6 opciones: 3 niveles de instalación + reinstalar + actualizar
+- ✅ **IP estática configurable** - Solicita IP, máscara CIDR y gateway durante instalación (sin DHCP)
 - ✅ **Creación automática** de contenedor LXC Debian 13 optimizado
 - ✅ **Autodetección de almacenamiento** válido para LXC (búsqueda en pvesm:vztmpl)
 - ✅ **Docker + Docker Compose plugin** (no legacy) instalados y configurados
@@ -23,9 +24,9 @@
 - ✅ **LXC Nesting habilitado** (--features nesting=1) para Docker en LXC
 - ✅ **Gestión de configuración persistente** (.npm_config) con detección de corrupción
 - ✅ **MOTD dinámico** - Información de contenedor en cada login
-- ✅ **Detección automática de IP** con reintentos inteligentes
+- ✅ **Reinstalar contenedor** - Opción [4] para destruir y recrear manteniendo configuración
+- ✅ **Actualizar sistema** - Opción [5] para actualizar Debian, Docker e imágenes
 - ✅ **Backups automáticos** (con nivel Excelente)
-- ✅ **Editor de URLs embebido** para cambiar dependencias
 - ✅ **Interfaz colorida y accesible** - Emojis, spinners, validaciones en tiempo real
 
 ---
@@ -64,13 +65,13 @@ curl -fsSL https://raw.githubusercontent.com/3KNOX/Nginx-Proxy-Manager/refs/head
 
 ---
 
-## 📊 Menú Principal (V2.0)
+## 📊 Menú Principal (V2.8.1)
 
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
 ║     🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER 🚀         ║
-║                        v2.0                                ║
+║                        v2.8.1                              ║
 ║              Created by: 3KNOX                             ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
@@ -81,10 +82,8 @@ curl -fsSL https://raw.githubusercontent.com/3KNOX/Nginx-Proxy-Manager/refs/head
   [2] 🟡 INSTALAR - Nivel MEDIA (1GB RAM | 2 CPU | 15GB)
   [3] 🔵 INSTALAR - Nivel EXCELENTE (2GB RAM | 2 CPU | 20GB + Backups)
 
-  [4] 🔄 REINSTALAR - Mantener datos (próximamente)
-  [5] ⬆️  ACTUALIZAR - Dependencias (próximamente)
-  [6] 🌐 EDITAR URLs - Cambiar links
-  [7] 📋 VER CONFIG - Mostrar guardada
+  [4] 🔄 REINSTALAR - Limpiar y recrear contenedor
+  [5] ⬆️  ACTUALIZAR - Sistema + Docker + Imágenes
 
   [0] ❌ SALIR
 
@@ -112,9 +111,16 @@ curl -fsSL https://raw.githubusercontent.com/3KNOX/Nginx-Proxy-Manager/refs/head
 ### 2️⃣ Datos del Contenedor
 Se solicitarán:
 - **VMID**: Identificador único del contenedor (ej: 9000)
-- **Hostname**: Nombre del contenedor (ej: npm-prod)
-- **Nodo**: Host Proxmox (ej: pve)
-- **Bridge**: Red virtual (default: vmbr0)
+- **Hostname**: Nombre del contenedor (ej: npm-prod) - Asignado automáticamente
+- **Nodo**: Host Proxmox (ej: pve) - Detectado automáticamente
+- **Bridge**: Red virtual (default: vmbr0) - Detectado automáticamente
+
+### 2️⃣.5️⃣ Configuración de IP Estática ⭐ NUEVO
+- **IP del contenedor**: Direccón IPv4 (ej: 192.168.1.100)
+- **Máscara de red (CIDR)**: Notación CIDR (ej: 24 para /24)
+- **Gateway**: Puerta de enlace de tu red (ej: 192.168.1.1)
+
+**NOTA**: El contenedor NO utilizará DHCP. La IP que configures será fija y persistente.
 
 ### 3️⃣ Credenciales de Seguridad
 - Contraseña root para MariaDB
@@ -176,7 +182,7 @@ Una vez completada la instalación:
 
 ---
 
-## 💾 Gestión de Configuración (V2.0)
+## 💾 Gestión de Configuración (V2.8.1)
 
 El script guarda automáticamente tu configuración en:
 
@@ -193,6 +199,9 @@ LAST_BACKUP=si
 LAST_CPU=2
 LAST_RAM=2048
 LAST_DISK=20
+LAST_CONTAINER_IP=192.168.1.100
+LAST_CONTAINER_CIDR=24
+LAST_CONTAINER_GATEWAY=192.168.1.1
 
 DOCKER_URL=https://get.docker.com
 COMPOSE_VERSION=2.20.0
