@@ -32,14 +32,16 @@ validate_menu() {
         echo -e "  ${GREEN}[3]${NC} 🔵 EXCELENTE - ${CYAN}Producción crítica${NC}"
         echo "      └─ RAM: 2048 MB | CPU: 2 cores | Disco: 20GB + Backups ✓"
         echo ""
+        echo -e "  ${RED}[0]${NC} ❌ SALIR - ${CYAN}Cancelar instalación${NC}"
+        echo ""
         echo -e "${YELLOW}└────────────────────────────────────────────────────────${NC}"
         echo ""
-        read -p "$(echo -e ${GREEN}Elige opción${NC}) (1-3): " OPT_LEVEL
+        read -p "$(echo -e ${GREEN}Elige opción${NC}) (0-3): " OPT_LEVEL
         
-        if [[ "$OPT_LEVEL" =~ ^[1-3]$ ]]; then
+        if [[ "$OPT_LEVEL" =~ ^[0-3]$ ]]; then
             break
         else
-            echo -e "${RED}❌ Opción inválida. Por favor elige 1, 2 o 3.${NC}"
+            echo -e "${RED}❌ Opción inválida. Por favor elige 0, 1, 2 o 3.${NC}"
             echo ""
             sleep 2
             clear
@@ -50,6 +52,10 @@ validate_menu() {
 validate_menu
 
 case "$OPT_LEVEL" in
+  0)
+    echo -e "${YELLOW}Cancelando instalación...${NC}"
+    exit 0
+    ;;
   1)
     RAM=512
     CPU=1
