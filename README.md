@@ -1,6 +1,6 @@
 # 🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER
 
-![Version](https://img.shields.io/badge/version-2.0-green.svg)
+![Version](https://img.shields.io/badge/version-2.7.4-green.svg)
 ![Proxmox](https://img.shields.io/badge/proxmox-7.x%2F8.x%2F9.x-orange.svg)
 ![Creator](https://img.shields.io/badge/creator-3KNOX-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -12,18 +12,21 @@
 ## ✨ Características Principales
 
 - ✅ **Menú interactivo** con 3 niveles de optimización (Normal, Media, Excelente)
-- ✅ **Creación automática** de contenedor LXC Debian 13
-- ✅ **Autodetección de almacenamiento** válido para LXC
-- ✅ **Docker + Docker Compose** instalados y configurados
-- ✅ **Nginx Proxy Manager** última versión con interfaz web
-- ✅ **MariaDB integrado** para persistencia de datos
-- ✅ **SSL/TLS automático** con Let's Encrypt
+- ✅ **Creación automática** de contenedor LXC Debian 13 optimizado
+- ✅ **Autodetección de almacenamiento** válido para LXC (búsqueda en pvesm:vztmpl)
+- ✅ **Docker + Docker Compose plugin** (no legacy) instalados y configurados
+- ✅ **Nginx Proxy Manager** última versión con interfaz web intuitiva
+- ✅ **MariaDB Aria** para máximo rendimiento y persistencia
+- ✅ **SSL/TLS automático** con Let's Encrypt integrado
+- ✅ **Health checks avanzados** - espera inteligente para servicios
+- ✅ **Credenciales seguras** - Paso de argumentos vs heredoc para evitar expansión incompleta
+- ✅ **LXC Nesting habilitado** (--features nesting=1) para Docker en LXC
+- ✅ **Gestión de configuración persistente** (.npm_config) con detección de corrupción
+- ✅ **MOTD dinámico** - Información de contenedor en cada login
+- ✅ **Detección automática de IP** con reintentos inteligentes
 - ✅ **Backups automáticos** (con nivel Excelente)
-- ✅ **Healthchecks integrados** en Docker Compose
-- ✅ **Detección automática de IP** del contenedor
-- ✅ **Gestión de configuración persistente** (.npm_config)
 - ✅ **Editor de URLs embebido** para cambiar dependencias
-- ✅ **Interfaz colorida** con emojis y validaciones
+- ✅ **Interfaz colorida y accesible** - Emojis, spinners, validaciones en tiempo real
 
 ---
 
