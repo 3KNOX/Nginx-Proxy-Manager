@@ -2,12 +2,15 @@
 ###############################################################################
 # NGINX PROXY MANAGER - PROXMOX INSTALLER v2.0
 # Autor: 3KNOX
-# Descripción: Instalador completo con menú, gestión de config, actualización
+# Descripción: Instalador completo con menú, gestión de config, URL editor
+# GitHub: https://github.com/3KNOX/Nginx-Proxy-Manager
 ###############################################################################
 
 set -e
 
-# ================ COLORES Y CONSTANTES ================
+################################################################################
+# SECCIÓN 1: COLORES Y CONSTANTES
+################################################################################
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -25,7 +28,9 @@ DEFAULT_COMPOSE_VERSION="2.20.0"
 DEFAULT_NPM_IMAGE="jc21/nginx-proxy-manager:latest"
 DEFAULT_DB_IMAGE="jc21/mariadb-aria:latest"
 
-# ================ FUNCIONES AUXILIARES ================
+################################################################################
+# SECCIÓN 2: FUNCIONES AUXILIARES
+################################################################################
 
 log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
@@ -62,7 +67,9 @@ show_menu() {
     echo ""
 }
 
-# ================ GESTIÓN DE CONFIGURACIÓN ================
+################################################################################
+# SECCIÓN 3: FUNCIONES DE CONFIGURACIÓN
+################################################################################
 
 load_config() {
     if [[ -f "$CONFIG_FILE" ]]; then
@@ -94,6 +101,28 @@ NPM_IMAGE=${NPM_IMAGE:-$DEFAULT_NPM_IMAGE}
 DB_IMAGE=${DB_IMAGE:-$DEFAULT_DB_IMAGE}
 EOF
     log_message "Configuración guardada en $CONFIG_FILE"
+}
+
+################################################################################
+# SECCIÓN 4: FUNCIONES DE INTERFAZ (MENÚS)
+################################################################################
+
+show_main_menu() {
+    local options=(
+        "${GREEN}[1]${NC} 🟢 INSTALAR - Nivel NORMAL (512MB RAM | 1 CPU | 10GB)"
+        "${YELLOW}[2]${NC} 🟡 INSTALAR - Nivel MEDIA (1GB RAM | 2 CPU | 15GB)"
+        "${BLUE}[3]${NC} 🔵 INSTALAR - Nivel EXCELENTE (2GB RAM | 2 CPU | 20GB + Backups)"
+        ""
+        "${CYAN}[4]${NC} 🔄 REINSTALAR - Mantener datos"
+        "${CYAN}[5]${NC} ⬆️  ACTUALIZAR - Dependencias"
+        "${CYAN}[6]${NC} 🌐 EDITAR URLs - Cambiar links"
+        "${CYAN}[7]${NC} 📋 VER CONFIG - Mostrar guardada"
+        ""
+        "${RED}[0]${NC} ❌ SALIR"
+    )
+    
+    show_menu "MENÚ PRINCIPAL" "${options[@]}"
+    read -p "$(echo -e ${GREEN}Elige opción${NC}) (0-7): " MAIN_OPTION
 }
 
 show_config() {
@@ -130,8 +159,6 @@ show_config() {
     
     read -p "Presiona Enter para volver..."
 }
-
-# ================ EDITOR DE URLs ================
 
 edit_urls() {
     show_header
@@ -171,7 +198,9 @@ edit_urls() {
     sleep 2
 }
 
-# ================ VALIDACIONES ================
+################################################################################
+# SECCIÓN 5: FUNCIONES DE VALIDACIÓN
+################################################################################
 
 validate_template() {
     if ! ls /var/lib/vz/template/cache/debian-13-standard* &>/dev/null; then
@@ -227,87 +256,9 @@ validate_node() {
     done
 }
 
-# ================ MENÚ PRINCIPAL ================
-
-show_main_menu() {
-    local options=(
-        "${GREEN}[1]${NC} 🟢 INSTALAR - Nginx Proxy Manager"
-        ""
-        "${CYAN}[4]${NC} 🔄 REINSTALAR - Mantener datos"
-        "${CYAN}[5]${NC} ⬆️  ACTUALIZAR - Dependencias"
-        "${CYAN}[6]${NC} 🌐 EDITAR URLs - Cambiar links"
-        "${CYAN}[7]${NC} 📋 VER CONFIG - Mostrar guardada"
-        ""
-        "${RED}[0]${NC} ❌ SALIR"
-    )
-    
-    show_menu "MENÚ PRINCIPAL" "${options[@]}"
-    read -p "$(echo -e ${GREEN}Elige opción${NC}) (0-7): " MAIN_OPTION
-}
-
-# ================ MENÚ DE SELECCIÓN DE NIVEL ================
-
-show_level_menu() {
-    while true; do
-        local options=(
-            "${GREEN}[1]${NC} 🟢 NORMAL - Aplicaciones ligeras"
-            "      └─ RAM: 512 MB  | CPU: 1 core  | Disco: 10GB"
-            ""
-            "${YELLOW}[2]${NC} 🟡 MEDIA - Producción estándar"
-            "      └─ RAM: 1024 MB | CPU: 2 cores | Disco: 15GB"
-            ""
-            "${BLUE}[3]${NC} 🔵 EXCELENTE - Producción crítica"
-            "      └─ RAM: 2048 MB | CPU: 2 cores | Disco: 20GB + Backups ✓"
-            ""
-            "${RED}[0]${NC} ← Volver al menú anterior"
-        )
-        
-        show_menu "SELECCIONA NIVEL DE OPTIMIZACIÓN" "${options[@]}"
-        read -p "$(echo -e ${GREEN}Elige opción${NC}) (0-3): " LEVEL_OPTION
-        
-        case "$LEVEL_OPTION" in
-            1)
-                RAM=512
-                CPU=1
-                DISK=10
-                BACKUP="no"
-                PROFILE="🟢 NORMAL"
-                echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
-                sleep 1
-                return 0
-                ;;
-            2)
-                RAM=1024
-                CPU=2
-                DISK=15
-                BACKUP="no"
-                PROFILE="🟡 MEDIA"
-                echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
-                sleep 1
-                return 0
-                ;;
-            3)
-                RAM=2048
-                CPU=2
-                DISK=20
-                BACKUP="si"
-                PROFILE="🔵 EXCELENTE"
-                echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
-                sleep 1
-                return 0
-                ;;
-            0)
-                return 1
-                ;;
-            *)
-                echo -e "${RED}❌ Opción inválida${NC}"
-                sleep 1
-                ;;
-        esac
-    done
-}
-
-# ================ INSTALAR ================
+################################################################################
+# SECCIÓN 6: FUNCIÓN PRINCIPAL DE INSTALACIÓN
+################################################################################
 
 install_npm() {
     log_message "Iniciando instalación NPM - Nivel: $PROFILE"
@@ -554,30 +505,67 @@ EOF"
     read -p "Presiona Enter para volver al menú..."
 }
 
-# ================ LAZO PRINCIPAL ================
+################################################################################
+# SECCIÓN 7: LAZO PRINCIPAL
+################################################################################
 
 while true; do
     show_main_menu
     
     case "$MAIN_OPTION" in
         1)
-            # Mostrar menú de niveles
-            if show_level_menu; then
-                # El usuario seleccionó un nivel
-                install_npm
-            fi
-            # Si retorna false (opción [0]), simplemente vuelve al menú principal
+            # INSTALAR - Nivel NORMAL
+            RAM=512
+            CPU=1
+            DISK=10
+            BACKUP="no"
+            PROFILE="🟢 NORMAL"
+            echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
+            sleep 1
+            install_npm
+            ;;
+        2)
+            # INSTALAR - Nivel MEDIA
+            RAM=1024
+            CPU=2
+            DISK=15
+            BACKUP="no"
+            PROFILE="🟡 MEDIA"
+            echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
+            sleep 1
+            install_npm
+            ;;
+        3)
+            # INSTALAR - Nivel EXCELENTE
+            RAM=2048
+            CPU=2
+            DISK=20
+            BACKUP="si"
+            PROFILE="🔵 EXCELENTE"
+            echo -e "${GREEN}✓ Configuración seleccionada: ${PROFILE}${NC}"
+            sleep 1
+            install_npm
             ;;
         4)
             show_header
-            echo -e "${YELLOW}Función de reinstalación...${NC}"
-            echo -e "${YELLOW}⚠️  Próximamente - Contacta al soporte${NC}"
+            echo -e "${CYAN}┌─ REINSTALAR ──────────────────────────────────────────────┐${NC}"
+            echo ""
+            echo -e "  ${YELLOW}Función de reinstalación...${NC}"
+            echo -e "  ${YELLOW}⚠️  Próximamente - Contacta al soporte${NC}"
+            echo ""
+            echo -e "${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
+            echo ""
             sleep 2
             ;;
         5)
             show_header
-            echo -e "${YELLOW}Función de actualización...${NC}"
-            echo -e "${YELLOW}⚠️  Próximamente - Contacta al soporte${NC}"
+            echo -e "${CYAN}┌─ ACTUALIZAR ──────────────────────────────────────────────┐${NC}"
+            echo ""
+            echo -e "  ${YELLOW}Función de actualización...${NC}"
+            echo -e "  ${YELLOW}⚠️  Próximamente - Contacta al soporte${NC}"
+            echo ""
+            echo -e "${CYAN}└───────────────────────────────────────────────────────────┘${NC}"
+            echo ""
             sleep 2
             ;;
         6)
@@ -591,7 +579,7 @@ while true; do
             exit 0
             ;;
         *)
-            echo -e "${RED}❌ Opción inválida${NC}"
+            echo -e "${RED}❌ Opción inválida (0-7)${NC}"
             sleep 1
             ;;
     esac
