@@ -9,16 +9,45 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 clear
-echo -e "${CYAN}==============================================="
-echo "  NGINX PROXY MANAGER TODO-EN-UNO PARA PROXMOX"
-echo -e "===============================================${NC}"
+echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║${NC}                                                            ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}     🚀 NGINX PROXY MANAGER - PROXMOX INSTALLER 🚀         ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}                                                            ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}              Created by: ${GREEN}3KNOX${CYAN}                        ║${NC}"
+echo -e "${CYAN}║${NC}                                                            ${CYAN}║${NC}"
+echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}"
+echo ""
 
-# ---------------- MENÚ DE OPTIMIZACIÓN ----------------
-echo "Selecciona el nivel de optimización para el contenedor:"
-echo "1) Normal - 512MB RAM, 1 CPU, disco 10GB"
-echo "2) Media - 1024MB RAM, 2 CPU, disco 15GB"
-echo "3) Excelente - 2048MB RAM, 2 CPU, disco 20GB + backups automáticos"
-read -p "Opción (1-3): " OPT_LEVEL
+# Función para validar entrada del menú
+validate_menu() {
+    while true; do
+        echo -e "${YELLOW}┌─ CONFIGURACIÓN DE RECURSOS ─────────────────────────────┐${NC}"
+        echo ""
+        echo -e "  ${GREEN}[1]${NC} 🟢 NORMAL - ${CYAN}Aplicaciones ligeras${NC}"
+        echo "      └─ RAM: 512 MB  | CPU: 1 core  | Disco: 10GB"
+        echo ""
+        echo -e "  ${YELLOW}[2]${NC} 🟡 MEDIA - ${CYAN}Producción estándar${NC}"
+        echo "      └─ RAM: 1024 MB | CPU: 2 cores | Disco: 15GB"
+        echo ""
+        echo -e "  ${GREEN}[3]${NC} 🔵 EXCELENTE - ${CYAN}Producción crítica${NC}"
+        echo "      └─ RAM: 2048 MB | CPU: 2 cores | Disco: 20GB + Backups ✓"
+        echo ""
+        echo -e "${YELLOW}└────────────────────────────────────────────────────────${NC}"
+        echo ""
+        read -p "$(echo -e ${GREEN}Elige opción${NC}) (1-3): " OPT_LEVEL
+        
+        if [[ "$OPT_LEVEL" =~ ^[1-3]$ ]]; then
+            break
+        else
+            echo -e "${RED}❌ Opción inválida. Por favor elige 1, 2 o 3.${NC}"
+            echo ""
+            sleep 2
+            clear
+        fi
+    done
+}
+
+validate_menu
 
 case "$OPT_LEVEL" in
   1)
@@ -26,40 +55,68 @@ case "$OPT_LEVEL" in
     CPU=1
     DISK=10
     BACKUP="no"
+    PROFILE="🟢 NORMAL"
     ;;
   2)
     RAM=1024
     CPU=2
     DISK=15
     BACKUP="no"
+    PROFILE="🟡 MEDIA"
     ;;
   3)
     RAM=2048
     CPU=2
     DISK=20
     BACKUP="si"
+    PROFILE="🔵 EXCELENTE"
     ;;
   *)
-    echo -e "${RED}Opción no válida. Saliendo...${NC}"
+    echo -e "${RED}❌ Opción no válida. Saliendo...${NC}"
     exit 1
     ;;
 esac
 
-echo -e "${CYAN}Configuración seleccionada:${NC} RAM=${RAM}MB, CPU=${CPU}, Disco=${DISK}GB, Backups=${BACKUP}"
+echo ""
+echo -e "${GREEN}✓ Configuración seleccionada:${NC} ${PROFILE}"
+echo -e "  RAM: ${GREEN}${RAM}MB${NC} | CPU: ${GREEN}${CPU}${NC} | Disco: ${GREEN}${DISK}GB${NC} | Backups: ${GREEN}${BACKUP}${NC}"
+echo ""
 
-# ---------------- DATOS DEL CONTENEDOR ----------------
-read -p "VMID del contenedor a crear (ej: 9000): " CTID
-read -p "Nombre del contenedor (hostname): " HOSTNAME
-read -p "Nodo de Proxmox donde se creará: " NODE
-read -p "Bridge de red (default vmbr0): " BRIDGE
+# Función para validar entrada de VMID
+validate_vmid() {
+    while true; do
+        read -p "$(echo -e ${YELLOW}VMID del contenedor${NC}) (ej: 9000): " CTID
+        if [[ "$CTID" =~ ^[0-9]{3,5}$ ]]; then
+            break
+        else
+            echo -e "${RED}❌ VMID inválido. Usa números entre 100-99999.${NC}"
+        fi
+    done
+}
+
+echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+echo -e "${YELLOW}DATOS DEL CONTENEDOR${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+echo ""
+
+validate_vmid
+read -p "$(echo -e ${YELLOW}Nombre del contenedor${NC}) (hostname, ej: npm-prod): " HOSTNAME
+read -p "$(echo -e ${YELLOW}Nodo de Proxmox${NC}) (ej: pve): " NODE
+read -p "$(echo -e ${YELLOW}Bridge de red${NC}) (default vmbr0): " BRIDGE
 BRIDGE=${BRIDGE:-vmbr0}
 
-# ---------------- CONTRASEÑAS ----------------
-echo -e "${CYAN}Introduce las contraseñas que se usarán:${NC}"
-read -p "Contraseña ROOT para MariaDB: " DB_ROOT_PASS
-read -p "Usuario NPM para base de datos (default npm): " DB_NPM_USER
+echo ""
+echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+echo -e "${YELLOW}CREDENCIALES DE SEGURIDAD${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+echo ""
+read -sp "$(echo -e ${YELLOW}Contraseña ROOT para MariaDB${NC}): " DB_ROOT_PASS
+echo ""
+read -p "$(echo -e ${YELLOW}Usuario NPM para base de datos${NC}) (default: npm): " DB_NPM_USER
 DB_NPM_USER=${DB_NPM_USER:-npm}
-read -p "Contraseña NPM para la base de datos: " DB_NPM_PASS
+read -sp "$(echo -e ${YELLOW}Contraseña NPM para la base de datos${NC}): " DB_NPM_PASS
+echo ""
+echo ""
 
 # ---------------- CREAR CONTENEDOR DEBIAN 13 ----------------
 TEMPLATE="local:vztmpl/debian-13-standard_13.0-1_amd64.tar.gz"
@@ -185,16 +242,47 @@ EOF"
 
 pct exec $CTID -- bash $INSTALL_SCRIPT
 
-# ---------------- DETECTAR IP DEL CONTENEDOR ----------------
+# Detectar IP del contenedor
+echo -e "${YELLOW}Detectando IP del contenedor...${NC}"
+sleep 3
 CONTAINER_IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')
 
-# ---------------- RESUMEN FINAL ----------------
-echo -e "${GREEN}===============================================${NC}"
-echo -e "${GREEN}Instalación completada!${NC}"
-echo -e "${CYAN}Accede a Nginx Proxy Manager en: http://${CONTAINER_IP}:81${NC}"
-echo -e "${CYAN}Usuario inicial: admin@example.com${NC}"
-echo -e "${CYAN}Contraseña inicial: changeme${NC}"
+# Resumen final con diseño mejorado
+echo ""
+echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║${NC}                                                            ${GREEN}║${NC}"
+echo -e "${GREEN}║${NC}            ✅ INSTALACIÓN COMPLETADA EXITOSAMENTE ✅       ${GREEN}║${NC}"
+echo -e "${GREEN}║${NC}                                                            ${GREEN}║${NC}"
+echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${CYAN}┌─ INFORMACIÓN DE ACCESO ──────────────────────────────────┐${NC}"
+echo -e "  🌐 ${CYAN}URL${NC}: ${GREEN}http://${CONTAINER_IP}:81${NC}"
+echo -e "  👤 ${CYAN}Usuario${NC}: ${GREEN}admin@example.com${NC}"
+echo -e "  🔑 ${CYAN}Contraseña${NC}: ${GREEN}changeme${NC}"
+echo -e "${CYAN}└──────────────────────────────────────────────────────────${NC}"
+echo ""
+echo -e "${CYAN}┌─ DETALLES DEL CONTENEDOR ────────────────────────────────┐${NC}"
+echo -e "  📌 ${CYAN}VMID${NC}: ${GREEN}${CTID}${NC}"
+echo -e "  📍 ${CYAN}Hostname${NC}: ${GREEN}${HOSTNAME}${NC}"
+echo -e "  🖧 ${CYAN}IP Address${NC}: ${GREEN}${CONTAINER_IP}${NC}"
+echo -e "  ⚙️  ${CYAN}Configuración${NC}: ${GREEN}${PROFILE}${NC}"
+echo -e "${CYAN}└──────────────────────────────────────────────────────────${NC}"
+echo ""
 if [[ "$BACKUP" == "si" ]]; then
-  echo -e "${YELLOW}Backups automáticos disponibles en: /root/nginx-proxy-manager/backups${NC}"
+  echo -e "${YELLOW}┌─ BACKUPS AUTOMÁTICOS ────────────────────────────────────┐${NC}"
+  echo -e "  💾 Backups disponibles en:"
+  echo -e "     ${GREEN}/root/nginx-proxy-manager/backups${NC}"
+  echo -e "${YELLOW}└──────────────────────────────────────────────────────────${NC}"
+  echo ""
 fi
-echo -e "${GREEN}===============================================${NC}"
+echo -e "${CYAN}┌─ PRÓXIMOS PASOS ────────────────────────────────────────────┐${NC}"
+echo -e "  1️⃣  Abre tu navegador en: ${GREEN}http://${CONTAINER_IP}:81${NC}"
+echo -e "  2️⃣  Inicia sesión con las credenciales anteriores"
+echo -e "  3️⃣  Cambia la contraseña desde el panel de administración"
+echo -e "  4️⃣  Configura tus proxies y certificados SSL"
+echo -e "${CYAN}└──────────────────────────────────────────────────────────${NC}"
+echo ""
+echo -e "${GREEN}═════════════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}  Instalador creado por: 3KNOX${NC}"
+echo -e "${GREEN}═════════════════════════════════════════════════════════════${NC}"
+echo ""
