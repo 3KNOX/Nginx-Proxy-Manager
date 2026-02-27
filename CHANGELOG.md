@@ -102,29 +102,22 @@ Historial de cambios de NGX_PM_PLUS - NPM Installer para Proxmox
 
 ---
 
-## Próximas Características (Roadmap)
+## Próximas Características (v2.1)
 
-### v2.1 - Próxima
+### En Desarrollo
 
 - [ ] Opción [4] - REINSTALAR con preservación de datos
 - [ ] Opción [5] - ACTUALIZAR dependencias automáticamente
-- [ ] Migración de configuración entre versiones
-- [ ] Rollback automático ante fallos
 
-### v2.2
+---
 
-- [ ] Dashboard de monitoreo web
-- [ ] Multi-node support
-- [ ] Alertas por email/webhook
-- [ ] API REST para automatización
-- [ ] Integración con Grafana
+**Nota**: El script ya cumple su propósito principal:
+- ✅ Automatización completa (sin pasos manuales)
+- ✅ Instalación en un único comando
+- ✅ Todas las dependencias incluidas
+- ✅ Gestión de configuración persistente
 
-### v3.0
-
-- [ ] Interfaz gráfica (Web UI)
-- [ ] Clúster de NPM
-- [ ] Load balancing automático
-- [ ] Métricas en tiempo real
+Futuras versiones se enfocarán en las 2 opciones faltantes del menú.
 
 ---
 
