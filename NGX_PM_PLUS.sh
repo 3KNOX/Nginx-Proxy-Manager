@@ -457,8 +457,8 @@ get_current_node() {
 }
 
 generate_hostname() {
-    # Generar nombre automático basado en el VMID
-    echo "npm-$CTID"
+    # Generar nombre automático: Nginx-PMX
+    echo "Nginx-PMX"
 }
 
 get_bridge() {
@@ -764,6 +764,13 @@ chmod 755 /etc/update-motd.d/00-header
 # Limpiar motd antiguo
 rm -f /etc/motd
 run-parts /etc/update-motd.d > /etc/motd 2>/dev/null || true
+
+# Agregar motd a .bashrc para mostrar al login
+if ! grep -q "cat /etc/motd" /root/.bashrc; then
+  echo "" >> /root/.bashrc
+  echo "# Mostrar MOTD al entrar" >> /root/.bashrc
+  echo "[ -r /etc/motd ] && cat /etc/motd" >> /root/.bashrc
+fi
 EOF"
     
     pct exec $CTID -- bash $INSTALL_SCRIPT
