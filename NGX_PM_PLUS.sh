@@ -82,7 +82,17 @@ show_menu() {
 
 load_config() {
     if [[ -f "$CONFIG_FILE" ]]; then
-        source "$CONFIG_FILE"
+        # Limpiar el archivo si está corrupto (valores con emojis/caracteres especiales)
+        if grep -q "^LAST_PROFILE=[^\"']" "$CONFIG_FILE" 2>/dev/null; then
+            echo -e "${YELLOW}⚠ Archivo de configuración corrupto, reiniciando...${NC}"
+            rm -f "$CONFIG_FILE"
+            return 1
+        fi
+        source "$CONFIG_FILE" 2>/dev/null || {
+            echo -e "${YELLOW}⚠ Error leyendo configuración, reiniciando...${NC}"
+            rm -f "$CONFIG_FILE"
+            return 1
+        }
         echo -e "${GREEN}✓ Configuración cargada${NC}"
         return 0
     else
@@ -93,15 +103,15 @@ load_config() {
 save_config() {
     cat > "$CONFIG_FILE" << EOF
 # Configuración de NPM Installer - $(date)
-LAST_VMID=$CTID
-LAST_HOSTNAME=$HOSTNAME
-LAST_NODE=$NODE
-LAST_BRIDGE=$BRIDGE
-LAST_PROFILE=$PROFILE
-LAST_CPU=$CPU
-LAST_RAM=$RAM
-LAST_DISK=$DISK
-LAST_BACKUP=$BACKUP
+LAST_VMID="$CTID"
+LAST_HOSTNAME="$HOSTNAME"
+LAST_NODE="$NODE"
+LAST_BRIDGE="$BRIDGE"
+LAST_PROFILE="$PROFILE"
+LAST_CPU="$CPU"
+LAST_RAM="$RAM"
+LAST_DISK="$DISK"
+LAST_BACKUP="$BACKUP"
 
 # URLs configurables
 DOCKER_URL=${DOCKER_URL:-$DEFAULT_DOCKER_URL}
